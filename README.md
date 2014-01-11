@@ -31,3 +31,5 @@ Alternatively, if you already started with the cms repository, you can do this:
 git remote rename origin cms
 git remote add origin https://github.com/dkong1796/pintos-hkw.git
 ```
+
+Finally, we should probably also follow good practice and make a new branch for each assignment and then merge it into master when it's ready.
