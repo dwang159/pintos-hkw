@@ -4,10 +4,14 @@ LDFLAGS= -lreadline
 
 all: mysh
 
-mysh: mysh.o
+mysh: mysh.o tokenize.o
+
+test: test_mysh.o tokenize.o
+	$(CC) $(CFLAGS) -o test test_mysh.o tokenize.o
+	./test
 
 clean: 
-	rm -f *.o *~ mysh
+	rm -f *.o *~ mysh test
 
 .PHONY: all clean
 
