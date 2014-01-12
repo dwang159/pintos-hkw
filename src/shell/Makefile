@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -W
+LDFLAGS= -lreadline
 
 all: mysh
 
