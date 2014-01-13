@@ -1,13 +1,6 @@
-#include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <assert.h>
-#include <ctype.h>
-
 #include "tokenize.h"
 
+/* Primitive printing (for debugging) */
 void print_token(token t) {
     printf("%d ", t.type);
     switch (t.type) {
@@ -28,12 +21,16 @@ void print_token(token t) {
     }
 }
 
+/* For debugging */
 void print_token_list(const token ts[]) {
     int i;
     for (i = 0; i < MAXTOKENS && ts[i].type != EMPTY; i++) {
         print_token(ts[i]);
     }
 }
+
+/* Checks for equality between tokens: must be same type and
+ * have the same data if applicable. */
 int eq_token(const token a, const token b) {
     if (a.type != b.type) 
         return false;
@@ -52,6 +49,7 @@ int eq_token(const token a, const token b) {
     }
 }
 
+/* Treats a token with empty type for a "null" terminated list */
 int eq_token_list(const token a[], const token b[]) {
     for (int i = 0; i < MAXTOKENS; i++) {
         if (!eq_token(a[i], b[i]))
@@ -124,8 +122,10 @@ int match_gen_bi_redirect(const char *inp, token *t) {
             }
             if (is_found) {
                 t->type = GENINOUTRED;
-                t->data.filedespair[0] = a;
-                t->data.filedespair[1] = b;
+                /* Put destination first and then source, see
+                 * the `pipe` API so filedespair can just be passed. */
+                t->data.filedespair[0] = b;
+                t->data.filedespair[1] = a;
                 return length;
             }
         }

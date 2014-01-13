@@ -1,3 +1,11 @@
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <assert.h>
+#include <ctype.h>
+
 #define MAXLINE 1024
 #define MAXTOKENS 1024
 #define MAXARGS 128
@@ -33,20 +41,26 @@ typedef struct {
     } data;
 } token;
 
-typedef struct {
-    char *cmdname;
-    char **args;
-    char *inp_source;
-    char *outp_source;
-} command;
-
+/* Printing for debugging */
 void print_token(const token t);
 void print_token_list(const token ts[]);
 
+/* Equality for testing */
 int eq_token(const token a, const token b);
 int eq_token_list(const token a[], const token b[]);
 
+/* Functions for parsing. The match functions are used to
+ * classify general strings, and valid_strchr is used to
+ * determine what is a valid character for a string that
+ * isn't surrounded by '"'s. Exported for testing.
+ */
 int match_gen_redirect(const char *inp, token *t);
 int match_gen_bi_redirect(const char *inp, token *t);
 int valid_strchr(char c);
+
+/* The only function that should be actually called by
+ * other non-testing modules. inp is the input string,
+ * outp is provided as a buffer to put the output in,
+ * and the return value is the number of tokens found.
+ */  
 int tokenize_input(const char *inp, token outp[]);
