@@ -28,6 +28,10 @@ Daniel Wang <dwang@caltech.edu>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
 
+http://www.jera.com/techinfo/jtns/jtn002.html
+cnswww.cns.cwru.edu/php/chet/readline/rltop.html
+Do you want all the stack exchange links, too?
+
 			   COMMAND SHELL
 			   =============
 
@@ -49,7 +53,9 @@ like (fast and loose with pointers for readability):
      token {.type = PIPE, .data = ?},
      token {.type = STRING, .data.str = &"b"},
     }
-and so on.
+This is then analyzed to put into separate commands to be piped together,
+specifying a list of arguments and either filenames or file descriptors for
+where I/O redirection should happen on that command.
 
 >> A2: Now, given the command:
 >> "a arg1 arg2 < inp.txt | b arg1 | c arg1 arg2 arg3 > out.txt"
@@ -82,6 +88,11 @@ and so on.
 
 >> A?: Why do the chdir and exit commands have to be implemented as
 >> built-in functions, rather than external programs?
+
+    Because they need to be run by the shell process instead of
+  subprocesses. If a child process runs `cd`, it will change it's
+  directory and quit but will not have affected the directory of
+  the shell. If a a child exits, the parent (shell) will not have.
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
