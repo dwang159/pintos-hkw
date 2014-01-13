@@ -33,6 +33,7 @@ int main() {
     char prompt[MAXLINE];
     char *line;
     token tknd_input[MAXTOKENS];
+    using_history();
     while(!exit) {
         make_prompt(prompt);
         line = readline(prompt);
@@ -42,8 +43,7 @@ int main() {
         if (tokenize_input(line, tknd_input) == -1) {
             fprintf(stderr, "Could not parse input, please try again.\n");
         } else {
-            for (int i = 0; tknd_input[i].type != EMPTY; i++)
-                print_token(tknd_input[i]);
+            print_token_list(tknd_input);
         }
     }
     return 0;
