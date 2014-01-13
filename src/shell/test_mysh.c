@@ -34,8 +34,8 @@ static char *test_match_bi_gen() {
     mu_assert("doesn't fail", out != -1);
     mu_assert("gets length right", out == 4);
     mu_assert("fills out type correctly", t->type == GENINOUTRED);
-    mu_assert("fills out a correctly", t->data.filedespair[0] == 1);
-    mu_assert("fills out b correctly", t->data.filedespair[1] == 2);
+    mu_assert("fills out a correctly", t->data.filedespair[1] == 1);
+    mu_assert("fills out b correctly", t->data.filedespair[0] == 2);
     return 0;    
 }
 
@@ -86,12 +86,35 @@ static char *test_tokenizer() {
     mu_assert("catures correct structure (hard)", eq_token_list(outp, thirdout));
     return 0;
 }
-                            
-                             
+
+static char *test_sep_cmd() {
+   token inp[16] = {{STRING, {.str = "a"}},
+                    {STRING, {.str = "arg1"}},
+                    {STRING, {.str = "arg2"}},
+                    {CHINP, {0}},
+                    {STRING, {.str = "inp.txt"}},
+                    {PIPE, {0}},
+                    {STRING, {.str = "b"}}, 
+                    {STRING, {.str = "arg1"}},
+                    {PIPE, {0}},
+                    {STRING, {.str = "c"}},
+                    {STRING, {.str = "arg1"}},
+                    {STRING, {.str = "arg2"}},
+                    {STRING, {.str = "arg3"}},
+                    {CHOUT, {0}},
+                    {STRING, {.str = "out.txt"}},
+                    {EMPTY, {0}}};
+   command *out = 
+   mu_assert("Basic command parsing", f);
+
+   return 0;
+}
+
 static char *all_tests() {
     mu_run_test(test_match_gen);
     mu_run_test(test_match_bi_gen);
     mu_run_test(test_tokenizer);
+    mu_run_test(test_sep_cmd);
     return 0;
 }
 

@@ -9,7 +9,7 @@
  * gives a more uniform look to tho command struct rather
  * than "maybe a string, maybe a file descriptor. Who knows?".
  */
-command *separate_commands(token tkns[]) {
+command *separate_commands(const token tkns[]) {
     /* Determine number of commands */
     int length;
     for (length = 0; length < MAXTOKENS && tkns[length].type != EMPTY; ++length)
@@ -22,6 +22,7 @@ command *separate_commands(token tkns[]) {
     }
     int j = 0; 
     char *filename;
+    int pair[2];
     for (int i = 0; i < MAXTOKENS && tkns[i].type != EMPTY; ++i) {
         int k = 0;
         switch(tkns[i].type) {
@@ -62,8 +63,8 @@ command *separate_commands(token tkns[]) {
         case GENOUTRED:
             assert(tkns[i + 1].type == STRING);
             filename = tkns[i + 1].data.str;
-            int output = open(filename, O_WRONLY | O_CREAT | O_EXCL);
-            int pair[2] = {output, tkns[i].data.onefiledes};
+            pair[0] = open(filename, O_WRONLY | O_CREAT | O_EXCL);
+            pair[1] = tkns[i].data.onefiledes;
             if (!pipe(pair)) {
                 fprintf(stderr, "Could not create pipe\n");
                 return NULL;
@@ -71,7 +72,9 @@ command *separate_commands(token tkns[]) {
             i += 2;
             break;
         case GENINOUTRED:
-            if (!pipe(tkns[i].data.filedespair)) {
+            pair[0] = tkns[i].data.filedespair[0];
+            pair[1] = tkns[i].data.filedespair[1];
+            if (!pipe(pair)) {
                 fprintf(stderr, "Could not create pipe\n");
                 return NULL;
             }
@@ -88,7 +91,17 @@ command *separate_commands(token tkns[]) {
     return ret;
 }
 
-                     
+int command_eq(const command a, const command b) {
+    int i;
+    for (i = 0; a.argv_cmds[i]; i++) {
+        if (strcmp(a.argv_cmds[i], b.argv_cmds[i]))
+            return false;
+    }
+    if (b.argv_cmds[i])  
+        return false;
+    else
+        return true;
+}
 
 
                          

@@ -17,4 +17,4 @@ typedef struct {
 } command;
 
 const command CMDBLANK = {NULL, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
-command *separate_commands(token[]);
+command *separate_commands(const token[]);
