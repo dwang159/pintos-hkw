@@ -1,3 +1,6 @@
+#ifndef TOKENIZE_H
+#define TOKENIZE_H
+
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
@@ -64,3 +67,5 @@ int valid_strchr(char c);
  * and the return value is the number of tokens found.
  */  
 int tokenize_input(const char *inp, token outp[]);
+
+#endif

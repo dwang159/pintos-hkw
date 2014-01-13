@@ -1,3 +1,6 @@
+#ifndef COMMAND_H
+#define COMMAND_H
+
 #include <assert.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -18,3 +21,4 @@ typedef struct {
 
 const command CMDBLANK = {NULL, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
 command *separate_commands(const token[]);
+#endif /* COMMAND_H */
