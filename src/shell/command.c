@@ -16,7 +16,7 @@ void print_string_list(char **ss) {
  * gives a more uniform look to tho command struct rather
  * than "maybe a string, maybe a file descriptor. Who knows?".
  */
-command *separate_commands(const token tkns[], int open_files[]) {
+command *separate_commands(const token tkns[]) {
     /* Determine number of commands */
     int length;
     for (length = 0; length < MAXTOKENS && tkns[length].type != EMPTY; ++length)
@@ -27,11 +27,10 @@ command *separate_commands(const token tkns[], int open_files[]) {
         fprintf(stderr, "Error allocating memory. Aborting.\n");
         exit(1);
     }
+    ret[0] = CMDBLANK;
     int retdx = 0; 
     char *filename;
-    int pair[2];
     int ardx = 0;
-    int num_open = 0;
     int fd;
     for (int tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
         switch(tkns[tdx].type) {
@@ -50,7 +49,6 @@ command *separate_commands(const token tkns[], int open_files[]) {
              * only write to new files. */
             fd = open(filename, O_WRONLY | O_TRUNC);
             ret[retdx].filedes_out = fd;
-            open_files[num_open++] = fd;
             tdx += 2;
             break;
         /* If a PIPE is encountered, the current command is finished. Add
@@ -58,10 +56,14 @@ command *separate_commands(const token tkns[], int open_files[]) {
         case PIPE:
             assert(ardx > 0); /* Ensure at least one command */
             ret[retdx].argv_cmds[ardx] = NULL;
+            /* Initialize the next command */
+            ret[++retdx] = CMDBLANK;
+            /* Indexing into a new argv_cmds */
             ardx = 0;
-            ++retdx;
             break;
         case STRING:
+            /* If there are no strings in the current command, create
+             * space for them */
             if (ardx == 0) {
                 char **p = (char **)malloc(sizeof(char *) * MAX_COMMAND_SIZE);
                 if (!p) {
@@ -70,6 +72,7 @@ command *separate_commands(const token tkns[], int open_files[]) {
                 }
                 ret[retdx].argv_cmds = p;
             }
+            /* Append the string to argv_cmds */
             ret[retdx].argv_cmds[ardx++] = strndup(tkns[tdx].data.str, MAXLINE);
             break;
         case CHOUTAPP:
@@ -77,7 +80,6 @@ command *separate_commands(const token tkns[], int open_files[]) {
             filename = tkns[tdx + 1].data.str;
             fd = open(filename, O_WRONLY | O_APPEND);
             ret[retdx].filedes_out = fd;
-            open_files[num_open++] = fd;
             tdx += 2;
             break;
         /* TODO: this is pretty shady and needs to be debugged. */
@@ -89,28 +91,34 @@ command *separate_commands(const token tkns[], int open_files[]) {
             printf("Dont come here\n");
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
-            /* TODO: this is not how pipe works! */
             fd = open(filename, O_WRONLY | O_TRUNC);
-            open_files[num_open++] = fd;
-            pair[1] = tkns[tdx].data.onefiledes;
-            if (!pipe(pair)) {
-                fprintf(stderr, "Could not create pipe\n");
-                return NULL;
+            if (dup2(fd, tkns[tdx].data.onefiledes) < 1) {
+                fprintf(stderr, "dup2 failed.\n");
+                return NULL;;
             }
             tdx += 2;
             break;
         case GENINOUTRED:
             printf("Dont come here\n");
             /* TODO: this is not how pipe works! */
-            pair[0] = tkns[tdx].data.filedespair[0];
-            pair[1] = tkns[tdx].data.filedespair[1];
-            if (!pipe(pair)) {
-                fprintf(stderr, "Could not create pipe\n");
+            if(dup2(tkns[tdx].data.filedespair[0], 
+                    tkns[tdx].data.filedespair[1]) < 0) {
+                fprintf(stderr, "dup2 failed.\n");
                 return NULL;
             }
             break;
         case RERUN:
             printf("Dont come here\n");
+            int n = tkns[tdx].data.last; 
+            printf("N is %d\n", n);
+            char *cmd = history_get(n)->line;
+            printf("history: %s\n", cmd);
+            token tkns[MAXTOKENS];
+            tokenize_input(cmd, tkns);
+            command *cms = separate_commands(tkns); 
+            printf("internal: \n");
+            print_command_list(cms);
+            printf("external\n");
             fprintf(stderr, "!n: Not implemented\n");
             return NULL;
         default:
@@ -129,9 +137,10 @@ command *separate_commands(const token tkns[], int open_files[]) {
     return ret;
 }
 
+/* Checks if two commands have the same argv lists */
 int eq_command(const command a, const command b) {
     int i;
-    for (i = 0; a.argv_cmds[i] && b.argv_cmds[i]; i++) {
+    for (i = 0; a.argv_cmds[i]; i++) {
         if (strcmp(a.argv_cmds[i], b.argv_cmds[i]))
             return false;
     }
@@ -141,6 +150,8 @@ int eq_command(const command a, const command b) {
         return true;
 }
 
+/* Reclaim the memory used by the arrays of commands for
+ */
 void free_command_list(command *freeable) {
     char **args;
     char **iter;
@@ -155,19 +166,23 @@ void free_command_list(command *freeable) {
     free(freeable);
 }
 
-
 void print_command_list(const command *freeable) {
     char **args;
     char *one_arg;
     printf("Args:\n");
-    while ((args = (freeable++)->argv_cmds)) {
-        printf("    cmd: ");
-        while ((one_arg = *args++)) {
-            printf("%s ", one_arg);
+    if (freeable) {
+        while (freeable && (args = freeable->argv_cmds)) {
+            printf("    cmd: ");
+            while ((one_arg = *args++)) {
+                printf("%s, ", one_arg);
+            }
+            printf("i/o/e des: %d %d %d", freeable->filedes_in, 
+                freeable->filedes_out, freeable-> filedes_err);
+            printf("\n");
+            freeable++;
         }
-        printf("\n");
-    }
+    } else
+        printf("<no commands>\n");
 }
 
 const command CMDBLANK = {NULL, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
-

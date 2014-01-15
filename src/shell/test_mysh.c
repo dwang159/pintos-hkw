@@ -114,8 +114,6 @@ static char *test_sep_cmd() {
    mu_assert("Basic command parsing", eq_command(out[0], e));
    char *args3[3] = {"b", "arg1", NULL};
    e.argv_cmds = args3;
-   print_command_list(out);
-  // print_command_list(e);
    mu_assert("BCP: again", eq_command(out[1], e));
    char *args4[5] = {"c", "arg1", "arg2", "arg3", NULL};
    e.argv_cmds = args4;

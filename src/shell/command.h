@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <readline/readline.h>
 #include <readline/history.h>
 #include "tokenize.h"
 
@@ -23,7 +24,7 @@ typedef struct {
 } command;
 
 const command CMDBLANK;
-command *separate_commands(const token[], int open_files[]);
+command *separate_commands(const token[]);
 int eq_command(const command, const command);
 void print_command_list(const command *freeable);
 void print_string_list(char**);
