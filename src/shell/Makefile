@@ -7,7 +7,7 @@ all: mysh
 mysh: mysh.o tokenize.o command.o
 
 test: test_mysh.o tokenize.o command.o
-	$(CC) $(CFLAGS) -o test test_mysh.o tokenize.o command.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o test test_mysh.o tokenize.o command.o
 	./test
 
 clean: 

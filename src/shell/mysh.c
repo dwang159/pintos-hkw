@@ -9,6 +9,7 @@
 #include <readline/history.h>
 
 #include "tokenize.h"
+#include "command.h"
 
 
 /* Takes a pointer to a buffer that will hold the prompt, and
@@ -32,6 +33,7 @@ int main() {
     int exit = false;
     char prompt[MAXLINE];
     char *line;
+    command *cmds;
     token tknd_input[MAXTOKENS];
     using_history();
     while(!exit) {
@@ -43,7 +45,8 @@ int main() {
         if (tokenize_input(line, tknd_input) == -1) {
             fprintf(stderr, "Could not parse input, please try again.\n");
         } else {
-            print_token_list(tknd_input);
+            cmds = separate_commands(tknd_input);
+            print_command_list(cmds);
         }
         free_token_list(tknd_input);
         /* Note: mkae sure to be careful not to delete any strings that might 

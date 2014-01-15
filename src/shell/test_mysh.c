@@ -104,12 +104,9 @@ static char *test_sep_cmd() {
    token basic[2] = {{.type = STRING, {.str = "hi"}},
                      {.type = EMPTY, {0}}};
    command *out = separate_commands(basic);
-   print_command_list(out);
    command e = CMDBLANK;
    char *args1[2] = {"hi", NULL};
    e.argv_cmds = args1;
-   eq_command(out[0], e); 
-   print_string_list(out[0].argv_cmds);
    mu_assert("simple parsing", eq_command(out[0], e));
    out = separate_commands(inp);
    char *args2[4] = {"a", "arg1", "arg2", NULL};
