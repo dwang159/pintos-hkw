@@ -1,6 +1,6 @@
 #include "command.h"
 
-void print_string_list(const char **ss) {
+void print_string_list(char **ss) {
     char *st;
     int i = 0;
     while ((st = *ss++)) {
@@ -16,7 +16,7 @@ void print_string_list(const char **ss) {
  * gives a more uniform look to tho command struct rather
  * than "maybe a string, maybe a file descriptor. Who knows?".
  */
-command *separate_commands(const token tkns[]) {
+command *separate_commands(const token tkns[], int open_files[]) {
     /* Determine number of commands */
     int length;
     for (length = 0; length < MAXTOKENS && tkns[length].type != EMPTY; ++length)
@@ -31,42 +31,38 @@ command *separate_commands(const token tkns[]) {
     char *filename;
     int pair[2];
     int ardx = 0;
+    int num_open = 0;
+    int fd;
     for (int tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
         switch(tkns[tdx].type) {
         /* For the redirects, find the appropriate filedescriptor with
          * open and add it to the command struct */
         case CHINP:
-            printf("Dont come here\n");
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
             ret[retdx].filedes_in = open(filename, O_RDONLY);;
             tdx += 2;
             break;
         case CHOUT:
-            printf("Dont come here\n");
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
             /* TODO: change this if we'd rather truncate than only
              * only write to new files. */
-            ret[retdx].filedes_out = open(filename,
-                                    O_WRONLY | O_TRUNC,
-                                    S_IWUSR) ;
+            fd = open(filename, O_WRONLY | O_TRUNC);
+            ret[retdx].filedes_out = fd;
+            open_files[num_open++] = fd;
             tdx += 2;
             break;
         /* If a PIPE is encountered, the current command is finished. Add
          * a NULL to satisfy execlp */
         case PIPE:
-            printf("Dont come here\n");
-            printf("Found a pipe\n");
             assert(ardx > 0); /* Ensure at least one command */
             ret[retdx].argv_cmds[ardx] = NULL;
             ardx = 0;
-            ++tdx;
             ++retdx;
             break;
         case STRING:
             if (ardx == 0) {
-                printf("Mallocing!\n");
                 char **p = (char **)malloc(sizeof(char *) * MAX_COMMAND_SIZE);
                 if (!p) {
                     fprintf(stderr, "Error allocating memory. Aborting\n");
@@ -77,10 +73,11 @@ command *separate_commands(const token tkns[]) {
             ret[retdx].argv_cmds[ardx++] = strndup(tkns[tdx].data.str, MAXLINE);
             break;
         case CHOUTAPP:
-            printf("Dont come here\n");
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
-            ret[retdx].filedes_out = open(filename, O_WRONLY | O_APPEND);
+            fd = open(filename, O_WRONLY | O_APPEND);
+            ret[retdx].filedes_out = fd;
+            open_files[num_open++] = fd;
             tdx += 2;
             break;
         /* TODO: this is pretty shady and needs to be debugged. */
@@ -93,7 +90,8 @@ command *separate_commands(const token tkns[]) {
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
             /* TODO: this is not how pipe works! */
-            pair[0] = open(filename, O_WRONLY | O_TRUNC);
+            fd = open(filename, O_WRONLY | O_TRUNC);
+            open_files[num_open++] = fd;
             pair[1] = tkns[tdx].data.onefiledes;
             if (!pipe(pair)) {
                 fprintf(stderr, "Could not create pipe\n");
@@ -110,7 +108,6 @@ command *separate_commands(const token tkns[]) {
                 fprintf(stderr, "Could not create pipe\n");
                 return NULL;
             }
-            ++tdx;
             break;
         case RERUN:
             printf("Dont come here\n");
@@ -122,7 +119,11 @@ command *separate_commands(const token tkns[]) {
     }
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
         printf(" you dont know the model");
+        assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;
+    }
+    if (!ret[retdx].argv_cmds) {
+        printf("empty list\n");
     }
     ret[retdx + 1] = CMDBLANK;
     return ret;
@@ -130,14 +131,6 @@ command *separate_commands(const token tkns[]) {
 
 int eq_command(const command a, const command b) {
     int i;
-    printf("EQ\n");
-    for (i = 0;  a.argv_cmds[i]; i++) {
-        printf("dont say %s\n", a.argv_cmds[i]);
-    }
-    for (i = 0; b.argv_cmds[i]; i++) {
-        printf("say %s\n", b.argv_cmds[i]);
-    }
-    printf("i is now really %d\n", i);
     for (i = 0; a.argv_cmds[i] && b.argv_cmds[i]; i++) {
         if (strcmp(a.argv_cmds[i], b.argv_cmds[i]))
             return false;

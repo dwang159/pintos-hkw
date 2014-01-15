@@ -13,6 +13,7 @@
 #include "tokenize.h"
 
 #define MAX_COMMAND_SIZE 128
+#define MAX_FILES 1024
 
 typedef struct {
     char **argv_cmds;
@@ -22,8 +23,8 @@ typedef struct {
 } command;
 
 const command CMDBLANK;
-command *separate_commands(const token[]);
+command *separate_commands(const token[], int open_files[]);
 int eq_command(const command, const command);
 void print_command_list(const command *freeable);
-void print_string_list(const char**);
+void print_string_list(char**);
 #endif /* COMMAND_H */
