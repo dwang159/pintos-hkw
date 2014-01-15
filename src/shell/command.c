@@ -32,6 +32,7 @@ command *separate_commands(const token tkns[]) {
     char *filename;
     int ardx = 0;
     int fd;
+    int n;
     for (int tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
         switch(tkns[tdx].type) {
         /* For the redirects, find the appropriate filedescriptor with
@@ -47,7 +48,7 @@ command *separate_commands(const token tkns[]) {
             filename = tkns[tdx + 1].data.str;
             /* TODO: change this if we'd rather truncate than only
              * only write to new files. */
-            fd = open(filename, O_WRONLY | O_TRUNC);
+            fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
@@ -78,11 +79,10 @@ command *separate_commands(const token tkns[]) {
         case CHOUTAPP:
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_APPEND);
+            fd = open(filename, O_CREAT | O_WRONLY | O_APPEND);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
-        /* TODO: this is pretty shady and needs to be debugged. */
         case BACKGROUND:
             printf("Dont come here\n");
             fprintf(stderr, "&: Not implemented\n");
@@ -100,7 +100,6 @@ command *separate_commands(const token tkns[]) {
             break;
         case GENINOUTRED:
             printf("Dont come here\n");
-            /* TODO: this is not how pipe works! */
             if(dup2(tkns[tdx].data.filedespair[0], 
                     tkns[tdx].data.filedespair[1]) < 0) {
                 fprintf(stderr, "dup2 failed.\n");
@@ -108,30 +107,30 @@ command *separate_commands(const token tkns[]) {
             }
             break;
         case RERUN:
-            printf("Dont come here\n");
-            int n = tkns[tdx].data.last; 
-            printf("N is %d\n", n);
+            n = tkns[tdx].data.last; 
             char *cmd = history_get(n)->line;
-            printf("history: %s\n", cmd);
             token tkns[MAXTOKENS];
             tokenize_input(cmd, tkns);
             command *cms = separate_commands(tkns); 
-            printf("internal: \n");
-            print_command_list(cms);
-            printf("external\n");
-            fprintf(stderr, "!n: Not implemented\n");
-            return NULL;
+            n = 0;
+            while (cms[n].argv_cmds != NULL) {
+                ret[retdx++] = cms[n++];
+            }
+            if (n > 0) {
+                ret[retdx] = CMDBLANK;
+                ardx = 0;
+            };
+            if(cms) {
+                free(cms);
+            }
+            break;
         default:
             assert(false);
         }
     }
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
-        printf(" you dont know the model");
         assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;
-    }
-    if (!ret[retdx].argv_cmds) {
-        printf("empty list\n");
     }
     ret[retdx + 1] = CMDBLANK;
     return ret;

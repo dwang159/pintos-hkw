@@ -11,7 +11,6 @@
 #include "tokenize.h"
 #include "command.h"
 
-
 /* Takes a pointer to a buffer that will hold the prompt, and
  * fills it with the prompt, equivalent to "\u:\w>" but
  * without substituting $HOME with a ~. Returns 0 if the
