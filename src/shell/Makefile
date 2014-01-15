@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -W
+CFLAGS = -Wall -W -std=c99
 LDFLAGS= -lreadline
 
 all: mysh
@@ -7,7 +7,7 @@ all: mysh
 mysh: mysh.o tokenize.o command.o
 
 test: test_mysh.o tokenize.o command.o
-	$(CC) $(CFLAGS) -o test test_mysh.o tokenize.o
+	$(CC) $(CFLAGS) -o test test_mysh.o tokenize.o command.o
 	./test
 
 clean: 

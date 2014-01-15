@@ -61,11 +61,13 @@ int match_gen_redirect(const char *inp, token *t);
 int match_gen_bi_redirect(const char *inp, token *t);
 int valid_strchr(char c);
 
-/* The only function that should be actually called by
+/* The only functions that should be actually called by
  * other non-testing modules. inp is the input string,
  * outp is provided as a buffer to put the output in,
  * and the return value is the number of tokens found.
  */  
 int tokenize_input(const char *inp, token outp[]);
 
+/* Cleans up any memory used by the token list */
+void free_token_list(token[]);
 #endif

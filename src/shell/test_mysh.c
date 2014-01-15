@@ -1,5 +1,6 @@
 #include "minunit.h"
 #include "tokenize.h"
+#include "command.h"
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -88,11 +89,9 @@ static char *test_tokenizer() {
 }
 
 static char *test_sep_cmd() {
-   token inp[16] = {{STRING, {.str = "a"}},
+   token inp[12] = {{STRING, {.str = "a"}},
                     {STRING, {.str = "arg1"}},
                     {STRING, {.str = "arg2"}},
-                    {CHINP, {0}},
-                    {STRING, {.str = "inp.txt"}},
                     {PIPE, {0}},
                     {STRING, {.str = "b"}}, 
                     {STRING, {.str = "arg1"}},
@@ -101,12 +100,27 @@ static char *test_sep_cmd() {
                     {STRING, {.str = "arg1"}},
                     {STRING, {.str = "arg2"}},
                     {STRING, {.str = "arg3"}},
-                    {CHOUT, {0}},
-                    {STRING, {.str = "out.txt"}},
                     {EMPTY, {0}}};
-   command *out = 
-   mu_assert("Basic command parsing", f);
-
+   token basic[2] = {{.type = STRING, {.str = "hi"}},
+                     {.type = EMPTY, {0}}};
+   command *out = separate_commands(basic);
+   print_command_list(out);
+   command e = CMDBLANK;
+   char *args1[2] = {"hi", NULL};
+   e.argv_cmds = args1;
+   eq_command(out[0], e); 
+   print_string_list(out[0].argv_cmds);
+   mu_assert("simple parsing", eq_command(out[0], e));
+   out = separate_commands(inp);
+   char *args2[4] = {"a", "arg1", "arg2", NULL};
+   e.argv_cmds = args2;
+   mu_assert("Basic command parsing", eq_command(out[0], e));
+   char *args3[3] = {"b", "arg1", NULL};
+   e.argv_cmds = args3;
+   mu_assert("BCP: again", eq_command(out[1], e));
+   char *args4[5] = {"c", "arg1", "arg2", "arg3", NULL};
+   e.argv_cmds = args4;
+   mu_assert("BCP: third time", eq_command(out[2], e));
    return 0;
 }
 

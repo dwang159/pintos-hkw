@@ -45,6 +45,9 @@ int main() {
         } else {
             print_token_list(tknd_input);
         }
+        free_token_list(tknd_input);
+        /* Note: mkae sure to be careful not to delete any strings that might 
+         * be needed in a background (&) process. */
     }
     return 0;
 }

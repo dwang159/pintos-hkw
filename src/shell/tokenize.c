@@ -147,12 +147,8 @@ int valid_strchr(char c) {
 int tokenize_input(const char *inp, token outp[]) {
     int tidx = 0;
     int inpdx = 0;
-    token *t;
-    t = (token *)malloc(sizeof(token));
-    if (!t) {
-        fprintf(stderr, "Allocation error. Aborting.\n");
-        exit(0);
-    }
+    token g = {EMPTY, {0}};
+    token *t = &g;
     unsigned long toklen;
     char c;
     while ((c = inp[inpdx]) != '\0') {
@@ -253,4 +249,13 @@ int tokenize_input(const char *inp, token outp[]) {
     }
     outp[tidx].type = EMPTY;
     return tidx;
+}
+
+/* Free any of the strings that have been malloc'd */
+void free_token_list(token freeable[]) {
+    for (int i = 0; i < MAXTOKENS && freeable[i].type != EMPTY; i++) {
+        if (freeable[i].type == STRING) {
+            free(freeable[i].data.str);
+        }
+    }
 }

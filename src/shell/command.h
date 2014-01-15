@@ -12,6 +12,8 @@
 #include <readline/history.h>
 #include "tokenize.h"
 
+#define MAX_COMMAND_SIZE 128
+
 typedef struct {
     char **argv_cmds;
     int filedes_in;
@@ -19,6 +21,9 @@ typedef struct {
     int filedes_err;
 } command;
 
-const command CMDBLANK = {NULL, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
+const command CMDBLANK;
 command *separate_commands(const token[]);
+int eq_command(const command, const command);
+void print_command_list(const command *freeable);
+void print_string_list(const char**);
 #endif /* COMMAND_H */
