@@ -10,6 +10,7 @@
 
 #include "tokenize.h"
 #include "command.h"
+#include "execute.h"
 
 /* Takes a pointer to a buffer that will hold the prompt, and
  * fills it with the prompt, equivalent to "\u:\w>" but
@@ -23,8 +24,7 @@ int make_prompt(char *prompt) {
     strlcat(prompt, ":", MAXLINE);
     char *cwd = getcwd(NULL, MAXLINE);
     strlcat(prompt, cwd, MAXLINE);
-    /* TODO: remove, but it drives me crazy to have such a long prompt. */
-    int attempted_len = strlcat(prompt, ">\n\t", MAXLINE);
+    int attempted_len = strlcat(prompt, "$ ", MAXLINE);
     return attempted_len != (int) strlen(prompt);
 }
 
@@ -45,10 +45,10 @@ int main() {
             fprintf(stderr, "Could not parse input, please try again.\n");
         } else {
             cmds = separate_commands(tknd_input);
-            print_command_list(cmds);
+            execute_commands(cmds);
         }
         free_token_list(tknd_input);
-        /* Note: mkae sure to be careful not to delete any strings that might 
+        /* Note: mkae sure to be careful not to delete any strings that might
          * be needed in a background (&) process. */
     }
     return 0;
