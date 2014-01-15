@@ -3,10 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <assert.h>
 #include <ctype.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <sys/utsname.h>
 
 #include "tokenize.h"
 #include "command.h"
@@ -20,12 +20,18 @@
  */
 int make_prompt(char *prompt) {
     char *username = getlogin();
-    strlcpy(prompt, username, MAXLINE);
-    strlcat(prompt, ":", MAXLINE);
+    struct utsname hostname;
+    uname(&hostname);
     char *cwd = getcwd(NULL, MAXLINE);
-    strlcat(prompt, cwd, MAXLINE);
-    int attempted_len = strlcat(prompt, "$ ", MAXLINE);
-    return attempted_len != (int) strlen(prompt);
+
+    /* Make a prompt that looks like this:
+     *
+     * [name@hostname /path/to/cwd] $
+     */
+    snprintf(prompt, MAXLINE, "[%s@%s %s]$ ", username,
+        hostname.nodename, cwd);
+
+    return 0;
 }
 
 int main() {
