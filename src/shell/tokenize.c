@@ -149,7 +149,7 @@ int tokenize_input(const char *inp, token outp[]) {
     int inpdx = 0;
     token g = {EMPTY, {0}};
     token *t = &g;
-    unsigned long toklen;
+    int toklen;
     char c;
     while ((c = inp[inpdx]) != '\0') {
         switch (c) {
@@ -197,7 +197,7 @@ int tokenize_input(const char *inp, token outp[]) {
                 exit(0);
             }
             strlcpy(st, inp + inpdx + 1, toklen + 1); /* +1 for null character. */
-            assert(strlen(st) == toklen);
+            assert(strlen(st) == (unsigned long) toklen);
             assert(st[0] != '"');
             assert(st[0] == inp[inpdx + 1]);
             assert(st[strlen(st) - 1] != '"');

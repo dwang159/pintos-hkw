@@ -82,7 +82,6 @@ command *separate_commands(const token tkns[]) {
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
-        /* TODO: this is pretty shady and needs to be debugged. */
         case BACKGROUND:
             printf("Dont come here\n");
             fprintf(stderr, "&: Not implemented\n");
@@ -100,8 +99,7 @@ command *separate_commands(const token tkns[]) {
             break;
         case GENINOUTRED:
             printf("Dont come here\n");
-            /* TODO: this is not how pipe works! */
-            if(dup2(tkns[tdx].data.filedespair[0],
+            if(dup2(tkns[tdx].data.filedespair[0], 
                     tkns[tdx].data.filedespair[1]) < 0) {
                 fprintf(stderr, "dup2 failed.\n");
                 return NULL;
@@ -112,26 +110,28 @@ command *separate_commands(const token tkns[]) {
             int n = tkns[tdx].data.last;
             printf("N is %d\n", n);
             char *cmd = history_get(n)->line;
-            printf("history: %s\n", cmd);
             token tkns[MAXTOKENS];
             tokenize_input(cmd, tkns);
-            command *cms = separate_commands(tkns);
-            printf("internal: \n");
-            print_command_list(cms);
-            printf("external\n");
-            fprintf(stderr, "!n: Not implemented\n");
-            return NULL;
+            command *cms = separate_commands(tkns); 
+            n = 0;
+            while (cms[n].argv_cmds != NULL) {
+                ret[retdx++] = cms[n++];
+            }
+            if (n > 0) {
+                ret[retdx] = CMDBLANK;
+                ardx = 0;
+            };
+            if(cms) {
+                free(cms);
+            }
+            break;
         default:
             assert(false);
         }
     }
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
-        printf(" you dont know the model");
         assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;
-    }
-    if (!ret[retdx].argv_cmds) {
-        printf("empty list\n");
     }
     ret[retdx + 1] = CMDBLANK;
     return ret;
