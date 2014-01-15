@@ -32,7 +32,7 @@ void print_token_list(const token ts[]) {
 /* Checks for equality between tokens: must be same type and
  * have the same data if applicable. */
 int eq_token(const token a, const token b) {
-    if (a.type != b.type) 
+    if (a.type != b.type)
         return false;
     switch(a.type) {
     case STRING:
@@ -59,10 +59,10 @@ int eq_token_list(const token a[], const token b[]) {
     }
     return true;
 }
-                 
+
 /* Checks if the substring at the start of inp matches
  * \d+>, for a redirection like n>. If it fails -1 is
- * return and t points to an empty token, else the 
+ * return and t points to an empty token, else the
  * number of characters consumed is returned and t
  * is updated with the appropriate file descriptor.
  */
@@ -87,7 +87,7 @@ int match_gen_redirect(const char *inp, token *t) {
     }
 }
 
-/* Checks if the beginning of the string pointed to 
+/* Checks if the beginning of the string pointed to
  * by inp matches the form "\d+>&\d+". Returns -1 if
  * the match fails, and puts EMPTY in the token. If
  * the match is successful, the return value is
@@ -110,7 +110,7 @@ int match_gen_bi_redirect(const char *inp, token *t) {
         t->type = EMPTY;
         return -1;
     }
-    if (*inp++ == '>') 
+    if (*inp++ == '>')
         if (*inp++ == '&') {
             length += 2; /* for the redirection symbols */
             is_found = false;
@@ -133,7 +133,7 @@ int match_gen_bi_redirect(const char *inp, token *t) {
     return -1;
 }
 
-/* Defines behavior for appropriate strings to be used in commands, 
+/* Defines behavior for appropriate strings to be used in commands,
  * arguments to those commands, and filenames.
  */
 int valid_strchr(char c) {
@@ -141,7 +141,7 @@ int valid_strchr(char c) {
 }
 
 /* Divides the input up, based on special characters and spaces.
- * Tokens: "|", "<", ">", ">>", ">&", "&", "n>", "a>&b", "!n", "\"*\"", and 
+ * Tokens: "|", "<", ">", ">>", ">&", "&", "n>", "a>&b", "!n", "\"*\"", and
  * words composed of characters that satisfy valid_strchr
  */
 int tokenize_input(const char *inp, token outp[]) {
@@ -154,7 +154,8 @@ int tokenize_input(const char *inp, token outp[]) {
     while ((c = inp[inpdx]) != '\0') {
         switch (c) {
         /* Single char tokens: make a one byte slice pointing to the current
-         * location */
+         * location
+         */
         case ' ':
             ++inpdx;
             break;
@@ -196,38 +197,48 @@ int tokenize_input(const char *inp, token outp[]) {
                 fprintf(stderr, "Error allocating memory. Aborting.\n");
                 exit(0);
             }
-            strlcpy(st, inp + inpdx + 1, toklen + 1); /* +1 for null character. */
+
+            /* Copy the contents of the string inside the double quotes
+             * into st. With strncpy, we have to manually add the terminating
+             * null char.
+             */
+            strncpy(st, inp + inpdx + 1, toklen);
+            st[toklen] = '\0';
+
             assert(strlen(st) == (unsigned long) toklen);
             assert(st[0] != '"');
             assert(st[0] == inp[inpdx + 1]);
             assert(st[strlen(st) - 1] != '"');
-            outp[tidx].type = STRING, 
+
+            outp[tidx].type = STRING,
             outp[tidx++].data.str = st;
-            inpdx += toklen + 2; /* +2 for the '"' characters around the token. */
+            /* +2 for the '"' characters around the token. */
+            inpdx += toklen + 2;
             break;
         case '!':
             ++inpdx;
             int n = 0;
-            /*I'm not using atoi because a) there should not be any spaces after the
-             * '!' or a +/- sign, and b) because the length is needed to properly move
-             * through the input.
+            /* I'm not using atoi because
+             * a) there should not be any spaces after the '!' or a +/- sign
+             * b) because the length is needed to properly move through
+             * the input.
              */
             while (isdigit(c = inp[inpdx])) {
                 n = n * 10 + c - '0';
                 ++inpdx;
             }
             if (n == 0) {
-                fprintf(stderr, "error: No number provided immediately after " 
+                fprintf(stderr, "error: No number provided immediately after "
                     "'!' or attempted to repeat a command not yet issued.\n");
                 return -1;
             }
-            outp[tidx].type = RERUN, 
+            outp[tidx].type = RERUN,
             outp[tidx++].data.last = n;
             break;
         default:
             if ((toklen = match_gen_bi_redirect(inp + inpdx, t)) != -1) {
                 outp[tidx++] = *t;
-                inpdx += toklen; 
+                inpdx += toklen;
             } else if ((toklen = match_gen_redirect(inp + inpdx,  t)) != -1) {
                 outp[tidx++] = *t;
                 inpdx += toklen;
@@ -235,12 +246,15 @@ int tokenize_input(const char *inp, token outp[]) {
                 toklen = 1;
                 while (valid_strchr(inp[inpdx + toklen]))
                     ++toklen;
-                char *st = (char *) malloc(toklen * sizeof(char));
+                char *st = (char *) malloc((toklen + 1) * sizeof(char));
                 if (!st) {
                     fprintf(stderr, "Error allocating memory. Aborting.\n");
                     exit(0);
                 }
-                strlcpy(st, inp + inpdx, toklen + 1); /* +1 for null character. */
+
+                strncpy(st, inp + inpdx, toklen);
+                st[toklen] = '\0';
+
                 outp[tidx].type = STRING;
                 outp[tidx++].data.str = st;
                 inpdx += toklen;
