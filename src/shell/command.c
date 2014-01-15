@@ -8,9 +8,9 @@ void print_string_list(char **ss) {
     }
 }
 /* Takes a list of tokens and creates a list of commands.
- * Commands are separated by PIPEs, and have knowledge 
+ * Commands are separated by PIPEs, and have knowledge
  * of their own I/O redirection. It is at this time that
- * filenames for I/O redirection are opened: they need 
+ * filenames for I/O redirection are opened: they need
  * to be opened before processes start to get forked so
  * that all children agree on file descriptors, and this
  * gives a more uniform look to tho command struct rather
@@ -28,7 +28,7 @@ command *separate_commands(const token tkns[]) {
         exit(1);
     }
     ret[0] = CMDBLANK;
-    int retdx = 0; 
+    int retdx = 0;
     char *filename;
     int ardx = 0;
     int fd;
@@ -47,7 +47,7 @@ command *separate_commands(const token tkns[]) {
             filename = tkns[tdx + 1].data.str;
             /* TODO: change this if we'd rather truncate than only
              * only write to new files. */
-            fd = open(filename, O_WRONLY | O_TRUNC);
+            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
@@ -78,7 +78,7 @@ command *separate_commands(const token tkns[]) {
         case CHOUTAPP:
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_APPEND);
+            fd = open(filename, O_WRONLY | O_APPEND | O_CREAT);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
@@ -101,7 +101,7 @@ command *separate_commands(const token tkns[]) {
         case GENINOUTRED:
             printf("Dont come here\n");
             /* TODO: this is not how pipe works! */
-            if(dup2(tkns[tdx].data.filedespair[0], 
+            if(dup2(tkns[tdx].data.filedespair[0],
                     tkns[tdx].data.filedespair[1]) < 0) {
                 fprintf(stderr, "dup2 failed.\n");
                 return NULL;
@@ -109,13 +109,13 @@ command *separate_commands(const token tkns[]) {
             break;
         case RERUN:
             printf("Dont come here\n");
-            int n = tkns[tdx].data.last; 
+            int n = tkns[tdx].data.last;
             printf("N is %d\n", n);
             char *cmd = history_get(n)->line;
             printf("history: %s\n", cmd);
             token tkns[MAXTOKENS];
             tokenize_input(cmd, tkns);
-            command *cms = separate_commands(tkns); 
+            command *cms = separate_commands(tkns);
             printf("internal: \n");
             print_command_list(cms);
             printf("external\n");
@@ -144,7 +144,7 @@ int eq_command(const command a, const command b) {
         if (strcmp(a.argv_cmds[i], b.argv_cmds[i]))
             return false;
     }
-    if (b.argv_cmds[i])  
+    if (b.argv_cmds[i])
         return false;
     else
         return true;
@@ -176,7 +176,7 @@ void print_command_list(const command *freeable) {
             while ((one_arg = *args++)) {
                 printf("%s, ", one_arg);
             }
-            printf("i/o/e des: %d %d %d", freeable->filedes_in, 
+            printf("i/o/e des: %d %d %d", freeable->filedes_in,
                 freeable->filedes_out, freeable-> filedes_err);
             printf("\n");
             freeable++;
