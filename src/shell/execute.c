@@ -6,7 +6,12 @@
  */
 void execute_commands(command *cmds) {
     int filedes[2];
-    int i;
+    int i, n;
+
+    /* Count the number of commands (n). We do not count the terminating
+     * NULL command.
+     */
+    for (n = 0; cmds[n].argv_cmds != NULL; n++);
 
     /* Iterate through all of the commands and set up the pipes. We iterate
      * through the first n-1 commands and set up a pipe between the ith and
@@ -16,7 +21,7 @@ void execute_commands(command *cmds) {
      *
      * This will overwrite the stdin/stdout redirection.
      */
-    for (i = 0; cmds[i + 1].argv_cmds != NULL; i++) {
+    for (i = 0; i < n - 1; i++) {
         if (pipe(filedes) == 0) {
             /* Set the 'out' filedes for this command to the write
              * end of the pipe and set the 'in' filedes for the next
@@ -32,7 +37,7 @@ void execute_commands(command *cmds) {
     }
 
     /* Iterate through all of the commands and execute them appropriately. */
-    for (i = 0; cmds[i].argv_cmds != NULL; i++) {
+    for (i = 0; i < n; i++) {
         pid_t pid = fork();
 
         /* The child process executes the command. */
@@ -61,6 +66,18 @@ void execute_commands(command *cmds) {
 
             /* Wait for the child to terminate. */
             waitpid(pid, &status, 0);
+
+            /* Close pipes corresponding to this command. We have to do this
+             * so that an EOF is reached when a pipe has no more input. We
+             * can only do this now and only for the current command, because
+             * otherwise the next command(s) will fail.
+             */
+            if (i > 0) {
+                close(cmds[i].filedes_in);
+            }
+            if (i < n - 1) {
+                close(cmds[i].filedes_out);
+            }
         }
     }
 }
