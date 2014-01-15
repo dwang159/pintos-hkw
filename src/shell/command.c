@@ -32,7 +32,6 @@ command *separate_commands(const token tkns[]) {
     char *filename;
     int ardx = 0;
     int fd;
-    int n;
     for (int tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
         switch(tkns[tdx].type) {
         /* For the redirects, find the appropriate filedescriptor with
