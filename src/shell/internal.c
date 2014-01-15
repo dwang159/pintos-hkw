@@ -29,7 +29,7 @@ void exec_history()
         i++;
     }
 }
-
+/* debugging
 int main(void)
 {
     char * input = "h";
@@ -42,3 +42,4 @@ int main(void)
     exec_history();
     return 0;
 }
+*/
