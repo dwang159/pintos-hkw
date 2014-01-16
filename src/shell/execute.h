@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 
 #include "command.h"
+#include "internal.h"
 
 void execute_commands(command *cmds);
 
