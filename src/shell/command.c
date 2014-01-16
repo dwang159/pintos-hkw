@@ -203,7 +203,7 @@ void free_command_list(command *freeable) {
         }
         free(args);
     }
-    free(freeable);
+    //free(freeable);
 }
 
 /* Useful for debugging */
