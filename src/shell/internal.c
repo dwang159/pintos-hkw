@@ -19,6 +19,7 @@ void exec_exit() {
 }
 
 void exec_history() {
+#ifndef __APPLE__
     HIST_ENTRY **hist = history_list();
     int i = 0;
     while (hist[i] != NULL)
@@ -26,4 +27,5 @@ void exec_history() {
         printf("%d: %s\n", i, hist[i]->line);
         i++;
     }
+#endif /* __APPLE__ */
 }
