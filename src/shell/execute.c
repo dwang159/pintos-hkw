@@ -35,9 +35,25 @@ void execute_commands(command *cmds) {
             exit(1);
         }
     }
+    /* Use dup to save a 'copy' of stdin, stdout, and stderr. This
+     * is important so that if we change the stdin/out/err for the
+     * shell process, we can restore it later.
+     */
+    int tmp_stdin, tmp_stdout, tmp_stderr;
+    tmp_stdin = dup(STDIN_FILENO);
+    tmp_stdout = dup(STDOUT_FILENO);
+    tmp_stderr = dup(STDERR_FILENO);
+
+    if (tmp_stdin < 0 || tmp_stdout < 0 || tmp_stderr < 0) {
+        fprintf(stderr, "error: dup() failed\n");
+        exit(1);
+    }
 
     /* Iterate through all of the commands and execute them appropriately. */
     for (i = 0; i < n; i++) {
+        /* Check if the command is an internal command, and if yes,
+         * execute it properly.
+         */
         pid_t pid = fork();
 
         /* The child process executes the command. */
@@ -46,9 +62,9 @@ void execute_commands(command *cmds) {
              * the filedes_in/out/err values are the default values (
              * STDIN/OUT/ERR_FILENO), then nothing happens.
              */
-            if (dup2(cmds[i].filedes_in, STDIN_FILENO) == -1 ||
-                dup2(cmds[i].filedes_out, STDOUT_FILENO) == -1 ||
-                dup2(cmds[i].filedes_err, STDERR_FILENO) == -1) {
+            if (dup2(cmds[i].filedes_in, STDIN_FILENO) < 0 ||
+                    dup2(cmds[i].filedes_out, STDOUT_FILENO) < 0 ||
+                    dup2(cmds[i].filedes_err, STDERR_FILENO) < 0) {
                 /* dup2 failed */
                 fprintf(stderr, "error: dup2() failed\n");
                 exit(1);
@@ -57,8 +73,8 @@ void execute_commands(command *cmds) {
             /* Execute the command. */
             if (execvp(cmds[i].argv_cmds[0], cmds[i].argv_cmds)) {
                 /* If execvp returns then an error occurred. */
-                fprintf(stderr, "error: execvp() failed\n");
-                exit(1);
+                fprintf(stderr, "error: could not find command %s\n",
+                    cmds[i].argv_cmds[0]);
             }
         } else {
             /* Parent process */
@@ -67,17 +83,32 @@ void execute_commands(command *cmds) {
             /* Wait for the child to terminate. */
             waitpid(pid, &status, 0);
 
-            /* Close pipes corresponding to this command. We have to do this
-             * so that an EOF is reached when a pipe has no more input. We
-             * can only do this now and only for the current command, because
-             * otherwise the next command(s) will fail.
+            /* Close files opened by this command. If the files are
+             * stdin/stdout/stderr, then we ignore them, but otherwise
+             * we don't want to leave files (including pipes) open for
+             * no reason.
              */
-            if (i > 0) {
+            if (cmds[i].filedes_in != STDIN_FILENO)
                 close(cmds[i].filedes_in);
-            }
-            if (i < n - 1) {
+            if (cmds[i].filedes_out != STDOUT_FILENO)
                 close(cmds[i].filedes_out);
-            }
+            if (cmds[i].filedes_err != STDOUT_FILENO)
+                close(cmds[i].filedes_out);
         }
     }
+
+    /* If stdin/stdout/stderr were changed for the shell process (for example,
+     * by running history | grep hello ), then we restore them now.
+     */
+    if (dup2(tmp_stdin, STDIN_FILENO) < 0 ||
+            dup2(tmp_stdout, STDOUT_FILENO) < 0 ||
+            dup2(tmp_stderr, STDERR_FILENO) < 0) {
+        fprintf(stderr, "error: dup2() failed\n");
+        exit(1);
+    }
+
+    /* Now close the temporary stdin/out/err files. */
+    close(tmp_stdin);
+    close(tmp_stdout);
+    close(tmp_stderr);
 }

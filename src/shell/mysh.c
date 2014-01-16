@@ -51,7 +51,9 @@ int main() {
             fprintf(stderr, "Could not parse input, please try again.\n");
         } else {
             cmds = separate_commands(tknd_input);
-            execute_commands(cmds);
+            if (cmds) {
+                execute_commands(cmds);
+            }
         }
         free_token_list(tknd_input);
         /* Note: mkae sure to be careful not to delete any strings that might

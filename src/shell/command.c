@@ -18,9 +18,24 @@ void print_string_list(char **ss) {
  */
 command *separate_commands(const token tkns[]) {
     /* Determine number of commands */
-    int length;
-    for (length = 0; length < MAXTOKENS && tkns[length].type != EMPTY; ++length)
-        ;
+    int length = 0;
+    int tdx = 0;
+    /* Keeps track of if we found the 'start' of a command. */
+    int cmd_start = false;
+    for (tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
+        if (tkns[tdx].type == STRING && !cmd_start) {
+            /* Found a new start to a command. */
+            cmd_start = true;
+            length++;
+        }
+        else if (tkns[tdx].type == PIPE) {
+            cmd_start = false;
+        }
+    }
+    if (length == 0) {
+        /* No commands. */
+        return NULL;
+    }
     command *ret;
     ret = (command *)malloc((length + 1) * sizeof(command));
     if (!ret) {
@@ -32,21 +47,33 @@ command *separate_commands(const token tkns[]) {
     char *filename;
     int ardx = 0;
     int fd;
-    for (int tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
+    int errors = false;
+    for (tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
+        if (errors)
+            break;
         switch(tkns[tdx].type) {
         /* For the redirects, find the appropriate filedescriptor with
-         * open and add it to the command struct */
+         * open and add it to the command struct
+         */
         case CHINP:
-            assert(tkns[tdx + 1].type == STRING);
+            /* After a < token, the next token must be a string. */
+            if (tkns[tdx + 1].type != STRING) {
+                fprintf(stderr, "error: expected filename after < token\n");
+                errors = true;
+                break;
+            }
             filename = tkns[tdx + 1].data.str;
-            ret[retdx].filedes_in = open(filename, O_RDONLY);;
+            ret[retdx].filedes_in = open(filename, O_RDONLY);
             tdx += 2;
             break;
         case CHOUT:
-            assert(tkns[tdx + 1].type == STRING);
+            /* After a > token, the next token must be a string. */
+            if (tkns[tdx + 1].type != STRING) {
+                fprintf(stderr, "error: expected filename after > token\n");
+                errors = true;
+                break;
+            }
             filename = tkns[tdx + 1].data.str;
-            /* TODO: change this if we'd rather truncate than only
-             * only write to new files. */
             fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT);
             ret[retdx].filedes_out = fd;
             tdx += 2;
@@ -54,11 +81,23 @@ command *separate_commands(const token tkns[]) {
         /* If a PIPE is encountered, the current command is finished. Add
          * a NULL to satisfy execlp */
         case PIPE:
-            assert(ardx > 0); /* Ensure at least one command */
+            /* There must be at least one command before a pipe. */
+            if (ardx == 0) {
+                fprintf(stderr, "error: expected command before pipe\n");
+                errors = true;
+                break;
+            }
+            /* There must be a command immediately following the pipe. */
+            if (tkns[tdx + 1].type != STRING) {
+                fprintf(stderr, "error: expected command after pipe\n");
+                errors = true;
+                break;
+            }
+            /* Set last argv to NULL for the previous command. */
             ret[retdx].argv_cmds[ardx] = NULL;
-            /* Initialize the next command */
+            /* Initialize the next command. */
             ret[++retdx] = CMDBLANK;
-            /* Indexing into a new argv_cmds */
+            /* Indexing into a new argv for the next command. */
             ardx = 0;
             break;
         case STRING:
@@ -76,13 +115,19 @@ command *separate_commands(const token tkns[]) {
             ret[retdx].argv_cmds[ardx++] = strndup(tkns[tdx].data.str, MAXLINE);
             break;
         case CHOUTAPP:
-            assert(tkns[tdx + 1].type == STRING);
+            /* The >> must be followed by a string. */
+            if (tkns[tdx + 1].type != STRING) {
+                fprintf(stderr, "error: expected filename after >> token\n");
+                errors = true;
+                break;
+            }
             filename = tkns[tdx + 1].data.str;
             fd = open(filename, O_WRONLY | O_APPEND | O_CREAT);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
         case BACKGROUND:
+            /* TODO */
             printf("Dont come here\n");
             fprintf(stderr, "&: Not implemented\n");
             return NULL;
@@ -99,7 +144,7 @@ command *separate_commands(const token tkns[]) {
             break;
         case GENINOUTRED:
             printf("Dont come here\n");
-            if(dup2(tkns[tdx].data.filedespair[0], 
+            if(dup2(tkns[tdx].data.filedespair[0],
                     tkns[tdx].data.filedespair[1]) < 0) {
                 fprintf(stderr, "dup2 failed.\n");
                 return NULL;
@@ -112,7 +157,7 @@ command *separate_commands(const token tkns[]) {
             char *cmd = history_get(n)->line;
             token tkns[MAXTOKENS];
             tokenize_input(cmd, tkns);
-            command *cms = separate_commands(tkns); 
+            command *cms = separate_commands(tkns);
             n = 0;
             while (cms[n].argv_cmds != NULL) {
                 ret[retdx++] = cms[n++];
@@ -126,9 +171,13 @@ command *separate_commands(const token tkns[]) {
             }
             break;
         default:
-            assert(false);
+            /* This should never happen. */
+            fprintf(stderr, "what just happened?\n");
         }
     }
+    if (errors)
+        return NULL;
+
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
         assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;

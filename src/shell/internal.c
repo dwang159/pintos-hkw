@@ -1,27 +1,25 @@
 #include "internal.h"
 
-void exec_cd(command * cmd)
-{
+void exec_cd(command *cmd) {
     // Create a buffer for the current directory
-    char curdir[PATH_MAX];
+    char curdir[MAXLINE];
 
     // Get the current directory and concatenate the user input
-    getcwd(curdir, PATH_MAX);
-    strcat(curdir, "/");
-    strcat(curdir, cmd->argv_cmds[1]);
+    getcwd(curdir, MAXLINE);
+    strncat(curdir, "/", MAXLINE - 1);
+    strncat(curdir, cmd->argv_cmds[1], MAXLINE - 1);
+    curdir[MAXLINE - 1] = '\0';
 
-    chdir(curdir);    
+    chdir(curdir);
 }
 
-void exec_exit(command * cmd)
-{
+void exec_exit() {
     printf("Bye!\n");
     exit(0);
 }
 
-void exec_history()
-{
-    HIST_ENTRY ** hist = history_list();
+void exec_history() {
+    HIST_ENTRY **hist = history_list();
     int i = 0;
     while (hist[i] != NULL)
     {
@@ -29,17 +27,3 @@ void exec_history()
         i++;
     }
 }
-/* debugging
-int main(void)
-{
-    char * input = "h";
-    using_history();
-    while(strcmp(input, "hello"))
-    {
-    input = readline("hello: ");
-    add_history(input);
-    }
-    exec_history();
-    return 0;
-}
-*/

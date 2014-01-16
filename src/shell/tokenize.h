@@ -15,7 +15,7 @@
 
 /* The following macros specify the kind of token found in
  * the input string for use in the token data structure. */
-#define EMPTY       0 
+#define EMPTY       0
 #define CHINP       1 /* < */
 #define CHOUT       2 /* > */
 #define PIPE        3 /* | */
@@ -26,13 +26,13 @@
 #define GENINOUTRED 8 /* a>&b */
 #define RERUN       9 /* !n */
 
-/* Algebraic data type to represent a token. If it comes out of a 
+/* Algebraic data type to represent a token. If it comes out of a
  * symbolic string, the data is empty and only the type is indicated.
  * If data is needed, like the number of the command to rerun, a pointer
  * to the string for the token, or the filedescriptor(s) referred to, that
  * is stored in the data union: .last for a rerun (n in !n), .onefiledes for
- * a general redirect (n in n>), .filedespair for advanced redirection 
- * ({a, b} in a>&b, and of course .str for when the token is just a string 
+ * a general redirect (n in n>), .filedespair for advanced redirection
+ * ({a, b} in a>&b, and of course .str for when the token is just a string
  * (a command, flag, argument, etc.). */
 typedef struct {
     int type;
@@ -65,7 +65,7 @@ int valid_strchr(char c);
  * other non-testing modules. inp is the input string,
  * outp is provided as a buffer to put the output in,
  * and the return value is the number of tokens found.
- */  
+ */
 int tokenize_input(const char *inp, token outp[]);
 
 /* Cleans up any memory used by the token list */
