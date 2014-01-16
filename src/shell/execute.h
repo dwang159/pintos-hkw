@@ -12,6 +12,7 @@
 #include "command.h"
 #include "internal.h"
 
+int dup2_stdfiles(int in, int out, int err);
 void execute_commands(command *cmds);
 
 #endif /* EXECUTE_H */

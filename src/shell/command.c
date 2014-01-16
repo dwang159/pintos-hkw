@@ -68,7 +68,7 @@ command *separate_commands(const token tkns[]) {
                 break;
             }
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 
+            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT,
                     S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
             tdx += 2;
@@ -124,11 +124,14 @@ command *separate_commands(const token tkns[]) {
             break;
         case BACKGROUND:
             /* TODO */
-            printf("Dont come here\n");
             fprintf(stderr, "&: Not implemented\n");
             return NULL;
         case GENOUTRED:
-            assert(tkns[tdx + 1].type == STRING);
+            if (tkns[tdx + 1].type != STRING) {
+                fprintf(stderr, "error: expected filename after n>\n");
+                errors = true;
+                break;
+            }
             filename = tkns[tdx + 1].data.str;
             fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT,
                     S_IRUSR | S_IWUSR);
@@ -166,6 +169,7 @@ command *separate_commands(const token tkns[]) {
         default:
             /* This should never happen. */
             fprintf(stderr, "what just happened?\n");
+            exit(1);
         }
     }
     if (errors)
