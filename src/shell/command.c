@@ -1,5 +1,4 @@
 #include "command.h"
-#include <errno.h>
 
 /* Takes a list of tokens and creates a list of commands.
  * Commands are separated by PIPEs, and have knowledge
@@ -173,7 +172,6 @@ command *separate_commands(const token tkns[]) {
        return NULL;
 
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
-        assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;
     }
     ret[retdx + 1] = CMDBLANK;
