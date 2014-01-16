@@ -32,7 +32,7 @@ int make_prompt(char *prompt) {
      */
     snprintf(prompt, MAXLINE, "[%s@%s %s]$ ", username,
         hostname.nodename, cwd);
-
+    free(cwd);
     return 0;
 }
 
@@ -57,7 +57,10 @@ int main() {
                 execute_commands(cmds);
             }
         }
+        free(line);
         free_token_list(tknd_input);
+        free_command_list(cmds);
+        free(cmds);
         /* Note: mkae sure to be careful not to delete any strings that might
          * be needed in a background (&) process. */
     }
