@@ -58,7 +58,7 @@ command *separate_commands(const token tkns[]) {
             }
             filename = tkns[tdx + 1].data.str;
             ret[retdx].filedes_in = open(filename, O_RDONLY);
-            tdx += 2;
+            tdx ++;
             break;
         case CHOUT:
             /* After a > token, the next token must be a string. */
@@ -71,7 +71,7 @@ command *separate_commands(const token tkns[]) {
             fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 
                     S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
-            tdx += 2;
+            tdx ++;
             break;
         /* If a PIPE is encountered, the current command is finished. Add
          * a NULL to satisfy execlp */
@@ -120,7 +120,7 @@ command *separate_commands(const token tkns[]) {
             fd = open(filename, O_WRONLY | O_APPEND | O_CREAT,
                     S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
-            tdx += 2;
+            tdx ++;
             break;
         case BACKGROUND:
             /* TODO */
@@ -136,7 +136,7 @@ command *separate_commands(const token tkns[]) {
                 fprintf(stderr, "dup2 failed.\n");
                 return NULL;
             }
-            tdx += 2;
+            tdx ++;
             break;
         case GENINOUTRED:
             if(dup2(tkns[tdx].data.filedespair[0],
