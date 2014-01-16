@@ -54,46 +54,55 @@ void execute_commands(command *cmds) {
         /* Check if the command is an internal command, and if yes,
          * execute it properly.
          */
-        pid_t pid = fork();
-
-        /* The child process executes the command. */
-        if (pid == 0) {
-            /* Change stdin, stdout, and stderr to the provided values. If
-             * the filedes_in/out/err values are the default values (
-             * STDIN/OUT/ERR_FILENO), then nothing happens.
-             */
-            if (dup2(cmds[i].filedes_in, STDIN_FILENO) < 0 ||
-                    dup2(cmds[i].filedes_out, STDOUT_FILENO) < 0 ||
-                    dup2(cmds[i].filedes_err, STDERR_FILENO) < 0) {
-                /* dup2 failed */
-                fprintf(stderr, "error: dup2() failed\n");
-                exit(1);
-            }
-
-            /* Execute the command. */
-            if (execvp(cmds[i].argv_cmds[0], cmds[i].argv_cmds)) {
-                /* If execvp returns then an error occurred. */
-                fprintf(stderr, "error: could not find command %s\n",
-                    cmds[i].argv_cmds[0]);
-            }
+        if (strcmp("exit", cmds[i].argv_cmds[0]) == 0) {
+            exec_exit();
+        } else if (strcmp("cd", cmds[i].argv_cmds[0]) == 0) {
+            /* TODO: redirect input/output for cd/history.. */
+            exec_cd(&cmds[i]);
+        } else if (strcmp("history", cmds[i].argv_cmds[0]) == 0) {
+            exec_history();
         } else {
-            /* Parent process */
-            int status;
+            pid_t pid = fork();
 
-            /* Wait for the child to terminate. */
-            waitpid(pid, &status, 0);
+            /* The child process executes the command. */
+            if (pid == 0) {
+                /* Change stdin, stdout, and stderr to the provided values.
+                 * If the filedes_in/out/err values are the default values (
+                 * STDIN/OUT/ERR_FILENO), then nothing happens.
+                 */
+                if (dup2(cmds[i].filedes_in, STDIN_FILENO) < 0 ||
+                        dup2(cmds[i].filedes_out, STDOUT_FILENO) < 0 ||
+                        dup2(cmds[i].filedes_err, STDERR_FILENO) < 0) {
+                    /* dup2 failed */
+                    fprintf(stderr, "error: dup2() failed\n");
+                    exit(1);
+                }
 
-            /* Close files opened by this command. If the files are
-             * stdin/stdout/stderr, then we ignore them, but otherwise
-             * we don't want to leave files (including pipes) open for
-             * no reason.
-             */
-            if (cmds[i].filedes_in != STDIN_FILENO)
-                close(cmds[i].filedes_in);
-            if (cmds[i].filedes_out != STDOUT_FILENO)
-                close(cmds[i].filedes_out);
-            if (cmds[i].filedes_err != STDOUT_FILENO)
-                close(cmds[i].filedes_out);
+                /* Execute the command. */
+                if (execvp(cmds[i].argv_cmds[0], cmds[i].argv_cmds)) {
+                    /* If execvp returns then an error occurred. */
+                    fprintf(stderr, "error: could not find command %s\n",
+                        cmds[i].argv_cmds[0]);
+                }
+            } else {
+                /* Parent process */
+                int status;
+
+                /* Wait for the child to terminate. */
+                waitpid(pid, &status, 0);
+
+                /* Close files opened by this command. If the files are
+                 * stdin/stdout/stderr, then we ignore them, but otherwise
+                 * we don't want to leave files (including pipes) open for
+                 * no reason.
+                 */
+                if (cmds[i].filedes_in != STDIN_FILENO)
+                    close(cmds[i].filedes_in);
+                if (cmds[i].filedes_out != STDOUT_FILENO)
+                    close(cmds[i].filedes_out);
+                if (cmds[i].filedes_err != STDOUT_FILENO)
+                    close(cmds[i].filedes_out);
+            }
         }
     }
 
