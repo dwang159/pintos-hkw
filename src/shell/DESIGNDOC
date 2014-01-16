@@ -3,7 +3,7 @@
 			| PROJECT 1: SHELL |
 			|  DESIGN DOCUMENT |
 			+------------------+
-				   
+
 ---- GROUP ----
 
 >> Fill in the names and email addresses of your group members.
@@ -12,11 +12,11 @@ Tim Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment:  
+>> Specify how many late tokens you are using on this assignment: 0
 
 >> What is the Git repository and commit hash for your submission?
 
-   Repository URL:  
+   Repository URL:
    commit ...
 
 ---- PRELIMINARIES ----
@@ -28,9 +28,11 @@ Daniel Wang <dwang@caltech.edu>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
 
+http://www.cplusplus.com/reference/
 http://www.jera.com/techinfo/jtns/jtn002.html
 cnswww.cns.cwru.edu/php/chet/readline/rltop.html
 Do you want all the stack exchange links, too?
+Man pages for all the unix commands
 
 			   COMMAND SHELL
 			   =============
@@ -47,11 +49,16 @@ of an algebraic data structure, with a type field to indicate which part of
 the sum type it is, and a data field to hold a string, an int, or a pair of
 ints for that token. So after the first pass, the array of tokens would look
 like (fast and loose with pointers for readability):
-    {token {.type = STRING, .data.str = &"a"}, 
+    {token {.type = STRING, .data.str = &"a"},
      token {.type = STRING, .data.str = &"arg1"},
-     ...
+     token {.type = STRING, .data.str = &"arg2"},
      token {.type = PIPE, .data = ?},
      token {.type = STRING, .data.str = &"b"},
+     token {.type = STRING, .data.str = &"arg1"},
+     token {.type = PIPE, .data = ?},
+     token {.type = STRING, .data.str = &"c"},
+     ...
+     token {.type = STRING, .data.str = &"arg3"}
     }
 This is then analyzed to put into separate commands to be piped together,
 specifying a list of arguments and either filenames or file descriptors for
@@ -62,11 +69,72 @@ where I/O redirection should happen on that command.
 >> Briefly explain specifically how the redirections are parsed and
 >> represented, and by what processes.
 
+We store commands in a command data structure that stores the argv array
+for that command and the file descriptors for stdin, stdout, and stderr. The
+file descriptors are initialized to the standard STDIN_FILENO, STDOUT_FILENO,
+and STDERR_FILENO, but can be changed while processing the command. When a
+command is executed, these file descriptors are dup2'd into the STDIN_FILENO,
+STDOUT_FILENO, and STDERR_FILENO before execution.
+
+The parsing of the tokens (this takes place in separate_commands() in
+command.h) is pretty straightforward. The general idea is this:
+- Pipes separate commands, so if there are N commands, there will be N-1 pipes.
+- Every string token goes into argv, unless it immediately follows a
+  <, >, >>, or n> token.
+- Input/output redirects are opened, and the file descriptor for the opened
+  file is stored in the the command struct, like this:
+
+  Input: a arg1 < inp.txt
+  inp.txt is opened. open() returns file descriptor 9
+  The command struct looks like this:
+
+  command.argv_cmds = {"a", "arg1"}
+  command.filedes_in = 9
+  command.filedes_out = STDOUT_FILENO
+  command.filedes_err = STDERR_FILENO
+
+Each set of tokens (separated by pipes) is parsed in this manner, and the
+command structs are put into an array of command structs. For the above input,
+the array of command structs would look like this:
+
+  Input: "a arg1 arg2 < inp.txt | b arg1 | c arg1 arg2 arg3 > out.txt"
+
+  commands[0].argv_cmds = {"a", "arg1", "arg2"}
+  commands[0].filedes_in = 9
+  commands[0].filedes_out = STDOUT_FILENO
+  commands[0].filedes_err = STDERR_FILENO
+
+  commands[0].argv_cmds = {"b", "arg1"}
+  commands[0].filedes_in = STDIN_FILENO
+  commands[0].filedes_out = STDOUT_FILENO
+  commands[0].filedes_err = STDERR_FILENO
+
+  commands[0].argv_cmds = {"c", "arg1", "arg2", "arg3"}
+  commands[0].filedes_in = STDIN_FILENO
+  commands[0].filedes_out = 11
+  commands[0].filedes_err = STDERR_FILENO
+
+The execution phase (performed by execute_commands() in execute.h) is
+passed this array of command structs. The first thing we do is to create
+pipes between each pair of commands, where the filedes_in and filedes_out
+attributes of each command struct are overwritten (so if the user passes
+in something like this: "a arg1 > out.txt | b arg1" then the pipe overwrites
+the file descriptor for out.txt. After the pipes are created, each
+command is executed in turn.
+
 ---- ALGORITHMS ----
 
 >> A3: Illustrate how you solved the problem of setting up
 >> redirection in a simple command like "a < inp.txt > out.txt", by
 >> describing what process takes care of the redirection and when.
+
+As described above, the files inp.txt and out.txt are opened by
+separate_commands() in command.h and their file descriptors are stored in
+command.filedes_in and command.filedes_out, respectively.
+
+When the command is executed (by execute_commands in execute.h),
+the child calls dup2 to copy filedes_in into STDIN_FILENO,
+filedes_out into STDOUT_FILENO, filedes_err into STDERR_FILENO.
 
 >> A4: Illustrate how you solved the problem of setting up the pipes
 >> between multiple operations in a single command, by describing
@@ -77,25 +145,76 @@ where I/O redirection should happen on that command.
 >> Keep your description of each process' responsibilities limited to
 >> ~25 words or less.
 
+Each command struct keeps track of filedes_in, filedes_out, and filedes_err.
+When execute_commands() is called, it first sets up pipes by calling pipe(),
+and then modifying the filedes_out of the first command and filedes_in of
+the second command to point to the pipe. So for input "a | b | c", each
+process does this:
+
+Shell (parent):
+- For each pipe, call pipe() to set up the file descriptors, and then
+  set the filedes_out of the first process to the pipe and the filedes_in
+  of the second process to the pipe.
+
+Child a:
+- Use dup2 to move filedes_in, filedes_out, filedes_err into
+  STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO. This sets the pipe's write
+  end to STDOUT_FILENO.
+- When child a terminates, all files are closed.
+
+Child b:
+- Again, use dup2 to move filedes_* to the appropriate places. This sets
+  STDOUT_FILENO to the first pipe's read end and STDIN_FILENO to the
+  second pipe's write end.
+
+Child c:
+- Move filedes_* to the right places. This sets STDIN_FILENO to the read end
+  end of the second pipe.
+
 >> A5: Similarly, describe the details of how terminated processes are
 >> reaped in the example command "a | b | c".
+
+The shell in general waits for the current command to finish before executing
+the next command. So for the command "a | b | c", this is what happens:
+
+- Shell forks. Parent waits for child to finish.
+- Child executes "a".
+- Shell reaps child, forks again.
+- Child executes "b".
+- Shell reaps child, forks again.
+- Child executes "c".
+- Shell reaps child.
 
 >> A6: Similarly, describe which processes are responsible for setting
 >> up the redirections in the example command
 >> "a < inp.txt | b | c > out.txt".
+
+- The locations of inp.txt and out.txt are set up in separate_commands().
+- When the shell forks to execute command "a" (in execute_commands() ),
+  the child moves the file descriptor for inp.txt into STDIN_FILENO before
+  execution.
+- When the shell forks to execute command "c", the child moves the file
+  descriptor for out.txt into STDOUT_FILENO before execution.
 
 ---- RATIONALE ----
 
 >> A?: Why do the chdir and exit commands have to be implemented as
 >> built-in functions, rather than external programs?
 
-    Because they need to be run by the shell process instead of
-  subprocesses. If a child process runs `cd`, it will change it's
+  Because they need to be run by the shell process instead of
+  subprocesses. If a child process runs `cd`, it will change its
   directory and quit but will not have affected the directory of
   the shell. If a a child exits, the parent (shell) will not have.
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+We chose this design to make it easy to pass information from the
+tokenization stage to the command-parsing stage and from the command-
+parsing stage to the execution stage. That is, we pass an array of
+token structs to the command parser, and an array of command structs to
+the execution function. By doing this, we cleanly separate each stage of
+parsing and executing an input.
 
 			  SURVEY QUESTIONS
 			  ================
