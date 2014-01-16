@@ -16,13 +16,26 @@ Daniel Wang <dwang@caltech.edu>
 
 >> What is the Git repository and commit hash for your submission?
 
-   Repository URL:
-   commit ...
+   Repository URL: login.cms.caltech.edu:/cs/courses/cs124/teams/pintos-hkw
+      We also have a github repository, if you want that.
+   commit: 8ce027cbcd... (although this will change when I commit
+      this designdoc)
 
 ---- PRELIMINARIES ----
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
+
+Extra credit:
+- Our shell supports >>
+- Our shell supports n>
+- a>&b doesn't work.
+- We support history using the readline library.
+- !n doesn't really work
+- Does not support &
+
+Other things we did:
+- cd command supports ~
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
@@ -240,3 +253,4 @@ website.
 
 >> Any other comments?
 
+We somehow managed to get pipes working before we got > and < working :\
