@@ -124,7 +124,8 @@ command *separate_commands(const token tkns[]) {
                 break;
             }
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_APPEND | O_CREAT);
+            fd = open(filename, O_WRONLY | O_APPEND | O_CREAT
+                    S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
