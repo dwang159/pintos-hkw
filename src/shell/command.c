@@ -1,5 +1,4 @@
 #include "command.h"
-#include <errno.h>
 
 void print_string_list(char **ss) {
     char *st;
@@ -181,7 +180,6 @@ command *separate_commands(const token tkns[]) {
         return NULL;
 
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
-        assert(false);
         ret[retdx].argv_cmds[ardx] = NULL;
     }
     ret[retdx + 1] = CMDBLANK;
