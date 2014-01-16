@@ -25,7 +25,7 @@ command *separate_commands(const token tkns[]) {
             cmd_start = false;
         }
     }
-    if (length == 0) {
+    if (length == 0 && tkns[tdx - 1].type != RERUN) {
         /* No commands. */
         return NULL;
     }
@@ -77,7 +77,7 @@ command *separate_commands(const token tkns[]) {
          * a NULL to satisfy execlp */
         case PIPE:
             /* There must be at least one command before a pipe. */
-            if (ardx == 0) {
+            if (ardx == 0 && tkns[tdx - 1].type != RERUN) {
                 fprintf(stderr, "error: expected command before pipe\n");
                 errors = true;
                 break;
@@ -89,7 +89,9 @@ command *separate_commands(const token tkns[]) {
                 break;
             }
             /* Set last argv to NULL for the previous command. */
-            ret[retdx].argv_cmds[ardx] = NULL;
+            if (tkns[tdx - 1].type != RERUN) {
+                ret[retdx].argv_cmds[ardx] = NULL;
+            }
             /* Initialize the next command. */
             ret[++retdx] = CMDBLANK;
             /* Indexing into a new argv for the next command. */

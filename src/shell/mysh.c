@@ -59,8 +59,10 @@ int main() {
         }
         free(line);
         free_token_list(tknd_input);
-        free_command_list(cmds);
-        free(cmds);
+        if (cmds != NULL) {
+            free_command_list(cmds);
+            free(cmds);
+        }
         /* Note: mkae sure to be careful not to delete any strings that might
          * be needed in a background (&) process. */
     }
