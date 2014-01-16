@@ -1,4 +1,5 @@
 #include "command.h"
+#include <errno.h>
 
 void print_string_list(char **ss) {
     char *st;
@@ -74,7 +75,8 @@ command *separate_commands(const token tkns[]) {
                 break;
             }
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT);
+            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 
+                    S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
             tdx += 2;
             break;
