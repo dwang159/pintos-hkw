@@ -14,6 +14,19 @@ int dup2_stdfiles(int in, int out, int err) {
 }
 
 /*
+ * Closes the provided files if they are not STDIN, STDOUT, or STDERR. This
+ * is useful for closing pipes.
+ */
+void close_not_std(int in, int out, int err) {
+    if (in != STDIN_FILENO)
+        close(in);
+    if (out != STDOUT_FILENO)
+        close(out);
+    if (err != STDERR_FILENO)
+        close(err);
+}
+
+/*
  * Takes an array of command structs and executes them. Expects the last
  * element to be CMDBLANK (defined in command.h).
  */
@@ -70,10 +83,41 @@ void execute_commands(command *cmds) {
         if (strcmp("exit", cmds[i].argv_cmds[0]) == 0) {
             exec_exit();
         } else if (strcmp("cd", cmds[i].argv_cmds[0]) == 0) {
-            /* TODO: redirect input/output for cd/history.. */
+            /* Redirect std* files. */
+            if (!dup2_stdfiles(cmds[i].filedes_in, cmds[i].filedes_out,
+                    cmds[i].filedes_err)) {
+                fprintf(stderr, "error: dup2() failed\n");
+                exit(1);
+            }
             exec_cd(&cmds[i]);
+
+            /* Close all pipes/redirects, if any. */
+            close_not_std(cmds[i].filedes_in, cmds[i].filedes_out,
+                    cmds[i].filedes_err);
+
+            /* Restore std* files. */
+            if (!dup2_stdfiles(tmp_stdin, tmp_stdout, tmp_stderr)) {
+                fprintf(stderr, "error: dup2() failed\n");
+                exit(1);
+            }
         } else if (strcmp("history", cmds[i].argv_cmds[0]) == 0) {
+            /* Redirect std* files. */
+            if (!dup2_stdfiles(cmds[i].filedes_in, cmds[i].filedes_out,
+                    cmds[i].filedes_err)) {
+                fprintf(stderr, "error: dup2() failed\n");
+                exit(1);
+            }
             exec_history();
+
+            /* Close all pipes/redirects, if any. */
+            close_not_std(cmds[i].filedes_in, cmds[i].filedes_out,
+                    cmds[i].filedes_err);
+
+            /* Restore std* files. */
+            if (!dup2_stdfiles(tmp_stdin, tmp_stdout, tmp_stderr)) {
+                fprintf(stderr, "error: dup2() failed\n");
+                exit(1);
+            }
         } else {
             pid_t pid = fork();
 
@@ -103,17 +147,8 @@ void execute_commands(command *cmds) {
                 /* Wait for the child to terminate. */
                 waitpid(pid, &status, 0);
 
-                /* Close files opened by this command. If the files are
-                 * stdin/stdout/stderr, then we ignore them, but otherwise
-                 * we don't want to leave files (including pipes) open for
-                 * no reason.
-                 */
-                if (cmds[i].filedes_in != STDIN_FILENO)
-                    close(cmds[i].filedes_in);
-                if (cmds[i].filedes_out != STDOUT_FILENO)
-                    close(cmds[i].filedes_out);
-                if (cmds[i].filedes_err != STDOUT_FILENO)
-                    close(cmds[i].filedes_out);
+                close_not_std(cmds[i].filedes_in, cmds[i].filedes_out,
+                        cmds[i].filedes_err);
             }
         }
     }

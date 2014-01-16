@@ -28,4 +28,6 @@ const command CMDBLANK;
 command *separate_commands(const token[]);
 int eq_command(const command, const command);
 void print_command_list(const command *freeable);
+void free_command_list(command *freeable);
+
 #endif /* COMMAND_H */

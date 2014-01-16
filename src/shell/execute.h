@@ -13,6 +13,7 @@
 #include "internal.h"
 
 int dup2_stdfiles(int in, int out, int err);
+void close_not_std(int in, int out, int err);
 void execute_commands(command *cmds);
 
 #endif /* EXECUTE_H */
