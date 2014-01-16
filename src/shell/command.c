@@ -1,13 +1,6 @@
 #include "command.h"
 #include <errno.h>
 
-void print_string_list(char **ss) {
-    char *st;
-    int i = 0;
-    while ((st = *ss++)) {
-        printf("%d %s \n", i++, st);
-    }
-}
 /* Takes a list of tokens and creates a list of commands.
  * Commands are separated by PIPEs, and have knowledge
  * of their own I/O redirection. It is at this time that
@@ -48,6 +41,7 @@ command *separate_commands(const token tkns[]) {
     char *filename;
     int ardx = 0;
     int fd;
+    int n;
     int errors = false;
     for (tdx = 0; tdx < MAXTOKENS && tkns[tdx].type != EMPTY; ++tdx) {
         if (errors)
@@ -124,7 +118,7 @@ command *separate_commands(const token tkns[]) {
                 break;
             }
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_APPEND | O_CREAT
+            fd = open(filename, O_WRONLY | O_APPEND | O_CREAT,
                     S_IRUSR | S_IWUSR);
             ret[retdx].filedes_out = fd;
             tdx += 2;
@@ -135,18 +129,17 @@ command *separate_commands(const token tkns[]) {
             fprintf(stderr, "&: Not implemented\n");
             return NULL;
         case GENOUTRED:
-            printf("Dont come here\n");
             assert(tkns[tdx + 1].type == STRING);
             filename = tkns[tdx + 1].data.str;
-            fd = open(filename, O_WRONLY | O_TRUNC);
+            fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT,
+                    S_IRUSR | S_IWUSR);
             if (dup2(fd, tkns[tdx].data.onefiledes) < 1) {
                 fprintf(stderr, "dup2 failed.\n");
-                return NULL;;
+                return NULL;
             }
             tdx += 2;
             break;
         case GENINOUTRED:
-            printf("Dont come here\n");
             if(dup2(tkns[tdx].data.filedespair[0],
                     tkns[tdx].data.filedespair[1]) < 0) {
                 fprintf(stderr, "dup2 failed.\n");
@@ -154,9 +147,7 @@ command *separate_commands(const token tkns[]) {
             }
             break;
         case RERUN:
-            printf("Dont come here\n");
-            int n = tkns[tdx].data.last;
-            printf("N is %d\n", n);
+            n = tkns[tdx].data.last;
             char *cmd = history_get(n)->line;
             token tkns[MAXTOKENS];
             tokenize_input(cmd, tkns);
@@ -179,7 +170,7 @@ command *separate_commands(const token tkns[]) {
         }
     }
     if (errors)
-        return NULL;
+       return NULL;
 
     if (ret[retdx].argv_cmds && ret[retdx].argv_cmds[ardx] != NULL) {
         assert(false);
@@ -202,8 +193,7 @@ int eq_command(const command a, const command b) {
         return true;
 }
 
-/* Reclaim the memory used by the arrays of commands for
- */
+/* Reclaim the memory used by the arrays of commands for */
 void free_command_list(command *freeable) {
     char **args;
     char **iter;
@@ -218,6 +208,7 @@ void free_command_list(command *freeable) {
     free(freeable);
 }
 
+/* Useful for debugging */
 void print_command_list(const command *freeable) {
     char **args;
     char *one_arg;

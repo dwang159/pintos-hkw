@@ -137,7 +137,8 @@ int match_gen_bi_redirect(const char *inp, token *t) {
  * arguments to those commands, and filenames.
  */
 int valid_strchr(char c) {
-    return isalnum(c) || c == '.' || c == '/' || c == '-' || c == '_';
+    return isgraph(c) && c != '>' && c != '<' && c != '&' && 
+                         c != '!' && c != '|' && c != ' ';
 }
 
 /* Divides the input up, based on special characters and spaces.
