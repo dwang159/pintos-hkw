@@ -1,6 +1,19 @@
 #include "execute.h"
 
 /*
+ * Calls dup2 to overwrite stdin, stdout, stderr. Returns true on success
+ * and false if errors are encountered. If the provied in/out/err values
+ * are the same as STDIN/OUT/ERR_FILENO, then nothing happens.
+ */
+int dup2_stdfiles(int in, int out, int err) {
+    if (dup2(in, STDIN_FILENO) < 0 ||
+            dup2(out, STDOUT_FILENO) < 0 ||
+            dup2(err, STDERR_FILENO) < 0)
+        return false;
+    return true;
+}
+
+/*
  * Takes an array of command structs and executes them. Expects the last
  * element to be CMDBLANK (defined in command.h).
  */
@@ -66,14 +79,8 @@ void execute_commands(command *cmds) {
 
             /* The child process executes the command. */
             if (pid == 0) {
-                /* Change stdin, stdout, and stderr to the provided values.
-                 * If the filedes_in/out/err values are the default values (
-                 * STDIN/OUT/ERR_FILENO), then nothing happens.
-                 */
-                if (dup2(cmds[i].filedes_in, STDIN_FILENO) < 0 ||
-                        dup2(cmds[i].filedes_out, STDOUT_FILENO) < 0 ||
-                        dup2(cmds[i].filedes_err, STDERR_FILENO) < 0) {
-                    /* dup2 failed */
+                if (!dup2_stdfiles(cmds[i].filedes_in, cmds[i].filedes_out,
+                        cmds[i].filedes_err)) {
                     fprintf(stderr, "error: dup2() failed\n");
                     exit(1);
                 }
@@ -84,6 +91,11 @@ void execute_commands(command *cmds) {
                     fprintf(stderr, "error: could not find command %s\n",
                         cmds[i].argv_cmds[0]);
                 }
+
+                /* Terminate this child, because it should not reach this
+                 * point if execvp was successfully called.
+                 */
+                exit(1);
             } else {
                 /* Parent process */
                 int status;
