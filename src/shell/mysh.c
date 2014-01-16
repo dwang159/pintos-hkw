@@ -13,15 +13,17 @@
 #include "execute.h"
 
 /* Takes a pointer to a buffer that will hold the prompt, and
- * fills it with the prompt, equivalent to "\u:\w>" but
- * without substituting $HOME with a ~. Returns 0 if the
- * prompt fits in MAXLINE bytes and 1 if there is an
- * overflow.
+ * fills it with the prompt.
  */
 int make_prompt(char *prompt) {
     char *username = getlogin();
     struct utsname hostname;
-    uname(&hostname);
+
+    if (uname(&hostname) < 0) {
+        fprintf(stderr, "error: uname() failed\n");
+        exit(1);
+    }
+
     char *cwd = getcwd(NULL, MAXLINE);
 
     /* Make a prompt that looks like this:
