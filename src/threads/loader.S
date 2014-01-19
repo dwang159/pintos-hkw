@@ -47,6 +47,51 @@
 ####        If you want to create helper routines, there is a TODO toward
 ####        the end of this file that shows where they should go.
 
+# Psuedo code:
+#main:
+#    for hd in hard_drives {
+#        mbr = load_sector(hd, 0)
+#        if not boot_flag(mbr):
+#            continue
+#        print "Booting from hd
+#        for part in partitions(mbr):
+#            if (bootable(part) and type(part) == PINTOS):
+#                try:
+#                    hdname = "hd%c%d" %(hd - 'a', indexof(part, partitions(mbr)))
+#                    print "Attempting to copy kernel from hd"
+#                    copy(hard_drive = hd, src = lba(part), tgt=0x20000, size=512k)
+#                    print "booting from " + hdname
+#                    goto start
+#                catch:
+#                    print "Copy failed, finding next partition"
+#                    continue
+#        print("Could not find boot part on bootable disk")
+#        diskless_boot_hook()
+#   print("Could not find bootable pintos part")
+
+#diskless_boot_hook:
+#   int $0x13
+#load_sector: hd, lba
+#   Extended read: AH = 0x42, DL = hd, DS:SI = DAP address
+#                 DAP = {0: 0x10, 1: 0, 2-3: 1, 4-7:mbr_address, 8-15:0}
+#copy: lba(4 , target, size, hd
+#   Extended read: AH = 0x42, DL = hk, DS:SI = DAP address
+#                (little endian)
+#                 DAP = {0: 0x10, 1: 0, 2-3: size (in sectors)
+#                        4-7: lba}
+#boot_flag: mbr
+#   return mbr[0x1fe] == 0x55 && mbr[0x1ff] == 0xaa (both 1 byte)
+#partitions: mbr
+#   return mbr + 0x1BE (*(16 byte))
+#type: part
+#   return part[0x04] (1 byte)
+#PINTOS:
+#   0x20
+#lba: part
+#   return part[0x08] (4 bytes) 
+#bootable: part
+#   return part[0] == 0x80 (1 byte)
+
 	call puts
 	.string "\r\rTODO:  IMPLEMENT THE BOOTLOADER\r"
 
@@ -149,4 +194,3 @@ popa_ret:
 #### Boot-sector signature for BIOS inspection.
 	.org LOADER_SIG - LOADER_BASE
 	.word 0xaa55
-
