@@ -8,11 +8,11 @@
 
 >> Fill in the names and email addresses of your group members.
 
-Daniel Wang d
-Daniel Kong
-Timothy Holland
+Timothy Holland (tholland@caltech.edu)
+Daniel Kong (dkong@caltech.edu)
+Daniel Wang (dwang@caltech.edu)
 
->> Specify how many late tokens you are using on this assignment:  
+>> Specify how many late tokens you are using on this assignment:
 
 >> What is the Git repository and commit hash for your submission?
 
@@ -27,8 +27,11 @@ Timothy Holland
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
-en.wikipedia.org/Logical_block_addressing
-en.w
+
+http://en.wikipedia.org/Logical_block_addressing
+http://en.wikipedia.org/wiki/INT_13H
+
+
 			     BOOTLOADER
 			     ==========
 
@@ -40,35 +43,43 @@ en.w
 >> Note that you do not have to enumerate the structure of sector data or
 >> anything like that; simply state the general purpose of the various
 >> memory areas used by your bootload code.
-TODO
-string section, for error messages
+
+We use memory location 0x20000, which is where the kernel eventually goes,
+as a buffer for reading from the disk. This buffer is used for reading MBR
+sectors as well as copying the pintos kernel. We also use the 16 bytes just
+before this region (0x1fff0) as the location for the disk access packet.
+
 
 ---- ALGORITHMS ----
 
 >> A2: Write a pseudocode description (e.g. at the level of Python and
 >> English phrases) of the sequence of operations that your bootloader
 >> performs when searching for, and then loading, the Pintos kernel.
-main:
-    for hd in hard_drives {
-        mbr = load_secter(hd, 0)
-        if not boot_flag(mbr):
-            continue
-        print "Booting from hd
-        for part in partitions(mbr):
-            if (bootable(part) and type(part) == PINTOS):
-                try:
-                    hdname = "hd%c%d" %(hd - 'a', indexof(part, partitions(mbr)))
-                    print "Attempting to copy kernel from hd"
-                    copy(hard_drive = hd, src = lba(part), tgt=0x20000, size=512k)
-                    print "booting from " + hdname
-                    goto start
-                catch:
-                    print "Copy failed, finding next partition"
-                    continue
-        print("Could not find boot part on bootable disk")
-        diskless_boot_hook()
-   print("Could not find bootable pintos part")
-    
+
+for each hard drive:
+  load the mbr
+  if mbr is not found:
+    report_error()
+  if mbr does not have boot flag:
+    continue
+  for partition in mbr:
+    if partition is bootable and if parition type is PINTOS:
+      try:
+        done = false
+        while not done:
+          copy next 64 KiB of kernel
+          if all 512 KiB are copied:
+            done = true
+        # goto start
+        start running kernel
+      catch:
+        report_error()
+
+report_error():
+  print "error: unable to find or load os. aborting."
+  # interrupt 0x18
+  exit
+
 >> A3: Did you have any difficulties making the entire bootloader fit
 >> within the space allotted?  If so, what steps did you take to reduce
 >> the size of your bootstrap code?
