@@ -36,69 +36,119 @@
 	call puts
 	.string "PiLo"
 
-#### TODO:  ITERATE THROUGH ALL HARD DISKS IN THE SYSTEM, LOOKING FOR A
+####        ITERATE THROUGH ALL HARD DISKS IN THE SYSTEM, LOOKING FOR A
 ####        BOOTABLE PINTOS PARTITION TO LOAD AND START.
 ####
 ####        Note that there are only ~300 bytes available for the entire
 ####        Pintos bootloader, as Pintos commands are stored in the
 ####        region immediately before the partition table in the sector.
 ####        Sooo... be concise!
-####
-####        If you want to create helper routines, there is a TODO toward
-####        the end of this file that shows where they should go.
 
-# Psuedo code:
-#main:
-#    for hd in hard_drives {
-#        mbr = load_sector(hd, 0)
-#        if not boot_flag(mbr):
-#            continue
-#        print "Booting from hd
-#        for part in partitions(mbr):
-#            if (bootable(part) and type(part) == PINTOS):
-#                try:
-#                    hdname = "hd%c%d" %(hd - 'a', indexof(part, partitions(mbr)))
-#                    print "Attempting to copy kernel from hd"
-#                    copy(hard_drive = hd, src = lba(part), tgt=0x20000, size=512k)
-#                    print "booting from " + hdname
-#                    goto start
-#                catch:
-#                    print "Copy failed, finding next partition"
-#                    continue
-#        print("Could not find boot part on bootable disk")
-#        diskless_boot_hook()
-#   print("Could not find bootable pintos part")
+# We use 0x20000 as the location for the buffer when reading from the hard
+# drives, and 0x1fff0 (16 bytes before the buffer) as the location for the DAP.
+# When we want to provide a segement:offset pointer to the buffer, use:
+#
+# segment: 0x2000
+# offset: 0x0
+#
+# And to provide a segment:offset pointer to the DAP, use:
+#
+# segment: 0x1fff
+# offset: 0x0
 
-#diskless_boot_hook:
-#   int $0x13
-#load_sector: hd, lba
-#   Extended read: AH = 0x42, DL = hd, DS:SI = DAP address
-#                 DAP = {0: 0x10, 1: 0, 2-3: 1, 4-7:mbr_address, 8-15:0}
-#copy: lba(4 , target, size, hd
-#   Extended read: AH = 0x42, DL = hk, DS:SI = DAP address
-#                (little endian)
-#                 DAP = {0: 0x10, 1: 0, 2-3: size (in sectors)
-#                        4-7: lba}
-#boot_flag: mbr
-#   return mbr[0x1fe] == 0x55 && mbr[0x1ff] == 0xaa (both 1 byte)
-#partitions: mbr
-#   return mbr + 0x1BE (*(16 byte))
-#type: part
-#   return part[0x04] (1 byte)
-#PINTOS:
-#   0x20
-#lba: part
-#   return part[0x08] (4 bytes) 
-#bootable: part
-#   return part[0] == 0x80 (1 byte)
+# Loop through all hard drives.
+  mov $0x80, %dl
+
+# Read the first sector (the MBR)
+check_mbr:
+  # Set up the DAP
+  mov $0x1fff0, %ebx
+  # DAP[0] = 0x10
+  movb $0x10, (%ebx)
+  # DAP[1] = 0
+  movb $0x00, 1(%ebx)
+  # DAP[2] = number of sectors (2 bytes)
+  movw $0x01, 2(%ebx)
+  # DAP[4] = sector:offset to buffer = 0x2000:0x0000
+  movl $0x20000000, 4(%ebx)
+  # DAP[8] = start of sectors to be read = 0
+  movl $0x00, 8(%ebx)
+  movl $0x00, 12(%ebx)
+
+  # Read the MBR from the drive.
+  mov $0x42, %ah
+  mov $0x1fff, %ds
+  mov $0x0000, %si
+  int $0x13
+
+  # Check status of disk read. The carry flag (CF) is set
+  # if there was an error.
+  jc unable_to_boot
+
+  # Check if MBR has boot flag. To do this, check if the
+  # last two bytes of the MBR have values 0x55 and 0xAA.
+  movl $0x20000, %ebx
+  cmpw $0x55aa, 0x1fe(%ebx)
+  jne next_hd
+
+  # Set %ecx to start of partition entries.
+  leal 0x1be(%ebx), %ecx
+
+check_part:
+  # Iterate through all 4 partitions of this hard drive
+  # Check if drive is bootable. If so, check type.
+  # Otherwise, move on.
+  cmpb (%ecx), $0x80
+  je type_check
+
+  # Jump to next partition unless we've checked all of them;
+  # go to an error handler in that case.
+  cmpl %ecx,
+  jne next_part
+  jmp no_boot_part
+
+type_check:
+  # Check to see if the drive has Pintos type (0x20). If so, start
+  # copying. Otherwise, move to next drive.
+  cmpb 0x04(%ecx), $0x20
+  je copy_kernel
+  jmp next_part
+
+next_part:
+  # If %ecx is at the last partition already, then there are no
+  # pintos partitions we can boot from, so we exit with an error
+  # message.
+  cmpl $0x201ee, %ecx
+  je no_boot_part
+
+  # Add 0x10 to %ecx so it points to the next partition table.
+  add $0x10, %ecx
+  jmp check_part
+
+next_hd:
+  # Increment %dl to check the next hard drive
+  inc %dl
+  jmp check_mbr
+
+no_boot_part:
+  call puts
+  .string "no bootable partition in boot drive. aborting."
+  int $0x18
+
+unable_to_boot:
+  call puts
+  .string "could not find pintos OS. aborting\r"
+
+  int $0x18
+
+# Use 0x20000 (where the kernel will eventually go) as a temporary buffer
+# for storing what we read from the hard disk.
 
 	call puts
 	.string "\r\rTODO:  IMPLEMENT THE BOOTLOADER\r"
 
 	# Stop the processor.
 	hlt
-
-#### TODO:  LOADING CODE ENDS HERE!
 
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
