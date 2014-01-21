@@ -114,6 +114,60 @@ type_check:
   je copy_kernel
   jmp next_part
 
+copy_kernel:
+  # %ecx points to the start of the partition table
+  # %dl has the hard disk number
+
+# Set up the DAP
+  mov $0x1fff0, %ebx
+  # DAP[0] = 0x10
+  movb $0x10, (%ebx)
+  # DAP[1] = 0
+  movb $0x00, 1(%ebx)
+  # DAP[2] = number of sectors (2 bytes)
+  # We read 64 sectors at a time (since some platforms have
+  # a limit to number of sectors read at a time). We need
+  # to read a total of 1024 sectors to load all 512 KiB of
+  # the kernel.
+  movw $0x40, 2(%ebx)
+
+  # Let %edi point to the starting sector we want to read from.
+  movl 0x08(%ecx), %edi
+
+  # Now let %ecx point to the location in memory to be written to.
+  movl $0x20000, %ecx
+
+copy_loop:
+  # DAP[4] = sector:offset to buffer. %ecx points to where the data
+  # should be written to.
+  movl %ecx, 4(%ebx)
+  # DAP[8] = start address of sectors to be read. %edi points to where
+  # the data should be read from in the hard drive.
+  movl %edi, 8(%ebx)
+  movl $0x00, 12(%ebx)
+
+  # Read the next 64 sectors from the drive and write
+  # them to (%ecx).
+  mov $0x42, %ah
+  mov $0x1fff, %ds
+  mov $0x0000, %si
+  int $0x13
+
+  # Increment %ecx (where the data is written to) and %edi
+  # (where data is read from) by 64 sectors (32 KiB).
+  addl $0x8000, %ecx
+  addl $0x8000, %edi
+
+  # Test if %ecx is at 0x20000 + 512 KiB. If yes, then we are done
+  # copying kernal code and we start running the kernel. Otherwise,
+  # we continue copying over kernel code
+  cmpl $0xa0000, %ecx
+  jne copy_loop
+
+  # Start running the kernel.
+  jmp $0x20000
+
+
 next_part:
   # If %ecx is at the last partition already, then there are no
   # pintos partitions we can boot from, so we exit with an error
@@ -138,7 +192,6 @@ no_boot_part:
 unable_to_boot:
   call puts
   .string "could not find pintos OS. aborting\r"
-
   int $0x18
 
 # Use 0x20000 (where the kernel will eventually go) as a temporary buffer
