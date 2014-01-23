@@ -130,13 +130,13 @@ no_boot_part:
     int $0x18
 
 type_check:
-  # Check to see if the drive has Pintos type (0x20). If so, start
-  # copying. Otherwise, move to next drive.
-  movb $0x20, %al     # AL = Pintos type
-  cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition entry
-                      # to the type
-  jne read_p_table  # If the type is incorrect, keep looking for a part.
-  # je copy kernel    # Else start moving the kernel from this partition
+    # Check to see if the drive has Pintos type (0x20). If so, start
+    # copying. Otherwise, move to next drive.
+    movb $0x20, %al        # AL = Pintos type
+    cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition 
+                           # entry to the type
+    jne read_p_table  # If the type is incorrect, keep looking for a part.
+    # je copy kernel    # Else start moving the kernel from this partition
 
 copy_kernel:
     call puts 
@@ -157,21 +157,21 @@ copy_kernel:
     # Thus, there are 2048 sectors to copy.
     # Copying 64 at a time, this means that the loop will take 
     # 32 iterations
-    mov 0x20, %ecx
+    movb 0x20, %al
 
-    # Store the target address in EDI
-    mov $0x20000, %edi
-
+    # Store the target offset in EDI
+    movw $0x2000, %di
+    movw $0x0000, 0x4(%si)
 copy_loop:
     # Invariants: 
-    #   ECX is the loop counter
+    #   AL is the loop counter
     #   EDI is the address to write to
     #   EBX holds the LBA to read the first sector from
     #   DS:SI points to the DAP
     #   AH holds the argument for an extended read (0x42)
 
-    movl %edi, 0x4(%si)  #Update target in DAP
-    add $0x4000, %edi     # There are 0x100 bytes in each sector,
+    movw %di, 0x6(%si)   #Update target in DAP
+    addw $0x0800, %di     # There are 0x100 bytes in each sector,
                           # and 0x40 sectors read so the target
                           # should increment by 0x4000
 
@@ -182,9 +182,10 @@ copy_loop:
                           # reading from by 0x40.
 
     # Read the next 64 sectors from the drive and write
-    # them to (%ecx).
+    # them to .
     int $0x13
-
+    jc read_unsuccessful   # IF carry flag, wasn't able to copy
+    
     dec %cx       # One more batch of sectors copied
     jnz copy_loop # End the loop if all 32 batches have been copied
     
