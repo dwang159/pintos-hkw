@@ -102,11 +102,12 @@ try_next_disk:
     jmp check_mbr
 
 read_p_table:
-    # Set %esi to start of partition entries.
-    mov $0x201be, %esi
+    # Set %si to start of partition entries.
+    mov $0x1be, %si
+p_table_loop:
     # Iterate through all 4 partitions of this hard drive
-    mov $0x80, %cl       # Move boot flag to AL
-    cmpb (%esi), %cl     # Check for a boot flag on htis partition
+    mov $0x80, %cl       # Move boot flag to CL
+    cmpb %es:0(%si), %cl     # Check for a boot flag on this partition
     je type_check        # if bootable, check that it has a PINTOS type
     # jne next_partition # Otherwise, increment and test for end condition
 
@@ -114,9 +115,11 @@ next_partition:
     # If %esi is at the last partition already, then there are no
     # pintos partitions we can boot from, so we exit with an error
     # message.
-    add $0x10, %esi    # Move to next ptable entry
-    cmp $0x201ee, %esi # Compare to end of ptable
-    jle read_p_table   # Keep going through them
+    call puts
+    .string "hi\r"
+    add $0x10, %si    # Move to next ptable entry
+    cmp $0x1ee, %si # Compare to end of ptable
+    jle p_table_loop   # Keep going through them
     # jg no_boot_part 
 
 no_boot_part:
@@ -130,23 +133,25 @@ type_check:
   # Check to see if the drive has Pintos type (0x20). If so, start
   # copying. Otherwise, move to next drive.
   movb $0x20, %al     # AL = Pintos type
-  cmpb 0x4(%esi), %al # Compare the 5th byte (off = 4) in partition entry
+  cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition entry
                       # to the type
-  jne next_partition  # If the type is incorrect, keep looking for a part.
+  jne read_p_table  # If the type is incorrect, keep looking for a part.
   # je copy kernel    # Else start moving the kernel from this partition
 
 copy_kernel:
+    call puts 
+    .string "chose part"
     # %esi points to the start of the partition entry
     # %dl has the hard disk number
   
-    movl 0x08(%esi), %ebx # Save the LBA from the partition entry
-    mov $DAP, %esi        # *ESI = DAP
+    movl 0x08(%si), %ebx # Save the LBA from the partition entry
+    mov $DAP, %si        # *ESI = DAP
 
     # We read 64 sectors at a time (since some platforms have
     # a limit to number of sectors read at a time). We need
     # to read a total of 1024 sectors to load all 512 KiB of
     # the kernel.
-    movw $0x40, 0x2(%esi)        # Move size to DAP[2]
+    movw $0x40, 0x2(%si)        # Move size to DAP[2]
 
     # There are 512 bytes in a sector, and 512 KiB to copy 
     # Thus, there are 2048 sectors to copy.
@@ -165,13 +170,13 @@ copy_loop:
     #   DS:SI points to the DAP
     #   AH holds the argument for an extended read (0x42)
 
-    movl %edi, 0x4(%esi)  #Update target in DAP
+    movl %edi, 0x4(%si)  #Update target in DAP
     add $0x4000, %edi     # There are 0x100 bytes in each sector,
                           # and 0x40 sectors read so the target
                           # should increment by 0x4000
 
-    movl %ebx, 0x8(%esi)  # Change start of sector reads
-    movl $0x0, 0xc(%esi)  # Keep high bytes 0 still  
+    movl %ebx, 0x8(%si)  # Change start of sector reads
+    movl $0x0, 0xc(%si)  # Keep high bytes 0 still  
     add $0x40, %ebx       # 0x40 sectors read in each iteration,
                           # so increment the sector to start 
                           # reading from by 0x40.
@@ -182,7 +187,9 @@ copy_loop:
 
     dec %cx       # One more batch of sectors copied
     jnz copy_loop # End the loop if all 32 batches have been copied
-
+    
+    call puts
+    .string "load successful\r"
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
 #### 32-bit linear address into a 16:16 segment:offset address for
