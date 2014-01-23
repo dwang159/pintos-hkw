@@ -58,22 +58,19 @@
 
 # Loop through all hard drives.
   mov $0x80, %dl
+  mov DAP, %si
+  jmp check_mbr
 
-# Read the first sector (the MBR)
-  # Set up the DAP on the stack
-  # DAP[8] start of sectors to be read = 0
-  pushl $0
-  pushl $0
-  # DAP[4] = sector:offset to buffer = 0x2000:0x0000
-  pushw $0x2000
-  pushw $0x0000
-  # DAP[2] = number of sectors to be read = 1
-  pushw $1
-  # DAP[0] and DAP[1]: 0x10 and 0
-  pushw $0x0010
-
-  # move DAP pointer to %si
-  mov %sp, %si
+DAP:
+  .byte 0x10        # DAP size
+  .byte 0x00        # unused
+  .byte 0x01        # 1 sector to read
+  .word 0x0000      # buffer offset is 0
+  .word 0x2000      # buffer segment is 0x2000
+  .word 0x0000 # First sector has LBA 0
+  .word 0x0000 # continuation of LBA
+  .word 0x0000
+  .word 0x0000
 
 check_mbr:
   # Read the MBR from the drive
