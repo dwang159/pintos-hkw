@@ -96,36 +96,36 @@ check_mbr:
   leal 0x1be(%ebx), %ecx
   # Start checking partitions.
 
-#check_part:
-#  # Iterate through all 4 partitions of this hard drive
-#  # Check if drive is bootable. If so, check type.
-#  # Otherwise, move on to next partition.
-#  mov $0x80, %al
-#  cmpb (%ecx), %al
-#  je type_check
-#
-#next_part:
-#  # If %ecx is at the last partition already, then there are no
-#  # pintos partitions we can boot from, so we exit with an error
-#  # message.
-#  cmpl $0x201ee, %ecx
-#  je no_boot_part
-#
-#  # Add 0x10 to %ecx so it points to the next partition table.
-#  add $0x10, %ecx
-#  jmp check_part
-#
-#type_check:
-#  # Check to see if the drive has Pintos type (0x20). If so, start
-#  # copying. Otherwise, move to next drive.
-#  movb 0x20, %al
-#  cmpb 0x04(%ecx), %al
-#  jne next_part
-#
-#copy_kernel:
-#  # %ecx points to the start of the partition table
-#  # %dl has the hard disk number
-#
+check_part:
+  # Iterate through all 4 partitions of this hard drive
+  # Check if drive is bootable. If so, check type.
+  # Otherwise, move on to next partition.
+  mov $0x80, %al
+  cmpb (%ecx), %al
+  je type_check
+
+next_part:
+  # If %ecx is at the last partition already, then there are no
+  # pintos partitions we can boot from, so we exit with an error
+  # message.
+  cmpl $0x201ee, %ecx
+  je no_boot_part
+
+  # Add 0x10 to %ecx so it points to the next partition table.
+  add $0x10, %ecx
+  jmp check_part
+
+type_check:
+  # Check to see if the drive has Pintos type (0x20). If so, start
+  # copying. Otherwise, move to next drive.
+  movb 0x20, %al
+  cmpb 0x04(%ecx), %al
+  jne next_part
+
+copy_kernel:
+  # %ecx points to the start of the partition table
+  # %dl has the hard disk number
+
 ## Set up the DAP
 #  mov $0x1fff0, %ebx
 #  # DAP[0] = 0x10
@@ -181,11 +181,11 @@ next_hd:
   inc %dl
   jmp check_mbr
 
-#no_boot_part:
-#  call puts
-#  .string "no bootable partition in boot drive. aborting.\r"
-#  int $0x18
-#
+no_boot_part:
+  call puts
+  .string "no bootable partition in boot drive. aborting.\r"
+  int $0x18
+
 
 unable_to_boot:
   call puts
