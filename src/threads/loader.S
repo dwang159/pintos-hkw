@@ -34,7 +34,7 @@
 	int $0x14			# Destroys AX.
 
 	call puts
-	.string "PiLo"
+	.string "PiLo\r"
 
 ####        ITERATE THROUGH ALL HARD DISKS IN THE SYSTEM, LOOKING FOR A
 ####        BOOTABLE PINTOS PARTITION TO LOAD AND START.
@@ -60,134 +60,132 @@
   mov $0x80, %dl
 
 # Read the first sector (the MBR)
-check_mbr:
-  # Set up the DAP
-  mov $0x1fff0, %ebx
-  # DAP[0] = 0x10
-  movb $0x10, (%ebx)
-  # DAP[1] = 0
-  movb $0x00, 1(%ebx)
-  # DAP[2] = number of sectors (2 bytes)
-  movw $0x01, 2(%ebx)
+  # Set up the DAP on the stack
+  # DAP[8] start of sectors to be read = 0
+  pushl $0
+  pushl $0
   # DAP[4] = sector:offset to buffer = 0x2000:0x0000
-  movl $0x20000000, 4(%ebx)
-  # DAP[8] = start of sectors to be read = 0
-  movl $0x00, 8(%ebx)
-  movl $0x00, 12(%ebx)
+  pushw $0x2000
+  pushw $0x0000
+  # DAP[2] = number of sectors to be read = 1
+  pushw $1
+  # DAP[0] and DAP[1]: 0x10 and 0
+  pushw $0x0010
 
-  # Read the MBR from the drive.
+  # move DAP pointer to %si
+  mov %sp, %si
+
+check_mbr:
+  # Read the MBR from the drive
   mov $0x42, %ah
-  mov $0x1fff, %ds
-  mov $0x0000, %si
   int $0x13
-
-  # Check status of disk read. The carry flag (CF) is set
-  # if there was an error.
+ 
+  # Check status of disk read. The carry flag (CF) is set if
+  # there was an error.
   jc unable_to_boot
 
   # Check if MBR has boot flag. To do this, check if the
   # last two bytes of the MBR have values 0x55 and 0xAA.
-  movl $0x20000, %ebx
-  cmpw $0x55aa, 0x1fe(%ebx)
+  movw $0x2000, %cx
+  movw %cx, %es
+  movw %es:0x01fe, %cx
+  cmpw $0xaa55, %cx
   jne next_hd
 
   # Set %ecx to start of partition entries.
   leal 0x1be(%ebx), %ecx
+  # Start checking partitions.
 
-check_part:
-  # Iterate through all 4 partitions of this hard drive
-  # Check if drive is bootable. If so, check type.
-  # Otherwise, move on.
-  cmpb (%ecx), $0x80
-  je type_check
-
-  # Jump to next partition unless we've checked all of them;
-  # go to an error handler in that case.
-  cmpl %ecx,
-  jne next_part
-  jmp no_boot_part
-
-type_check:
-  # Check to see if the drive has Pintos type (0x20). If so, start
-  # copying. Otherwise, move to next drive.
-  cmpb 0x04(%ecx), $0x20
-  je copy_kernel
-  jmp next_part
-
-copy_kernel:
-  # %ecx points to the start of the partition table
-  # %dl has the hard disk number
-
-# Set up the DAP
-  mov $0x1fff0, %ebx
-  # DAP[0] = 0x10
-  movb $0x10, (%ebx)
-  # DAP[1] = 0
-  movb $0x00, 1(%ebx)
-  # DAP[2] = number of sectors (2 bytes)
-  # We read 64 sectors at a time (since some platforms have
-  # a limit to number of sectors read at a time). We need
-  # to read a total of 1024 sectors to load all 512 KiB of
-  # the kernel.
-  movw $0x40, 2(%ebx)
-
-  # Let %edi point to the starting sector we want to read from.
-  movl 0x08(%ecx), %edi
-
-  # Now let %ecx point to the location in memory to be written to.
-  movl $0x20000, %ecx
-
-copy_loop:
-  # DAP[4] = sector:offset to buffer. %ecx points to where the data
-  # should be written to.
-  movl %ecx, 4(%ebx)
-  # DAP[8] = start address of sectors to be read. %edi points to where
-  # the data should be read from in the hard drive.
-  movl %edi, 8(%ebx)
-  movl $0x00, 12(%ebx)
-
-  # Read the next 64 sectors from the drive and write
-  # them to (%ecx).
-  mov $0x42, %ah
-  mov $0x1fff, %ds
-  mov $0x0000, %si
-  int $0x13
-
-  # Increment %ecx (where the data is written to) and %edi
-  # (where data is read from) by 64 sectors (32 KiB).
-  addl $0x8000, %ecx
-  addl $0x8000, %edi
-
-  # Test if %ecx is at 0x20000 + 512 KiB. If yes, then we are done
-  # copying kernal code and we start running the kernel. Otherwise,
-  # we continue copying over kernel code
-  cmpl $0xa0000, %ecx
-  jne copy_loop
-
-  # Start running the kernel.
-  jmp $0x20000
-
-
-next_part:
-  # If %ecx is at the last partition already, then there are no
-  # pintos partitions we can boot from, so we exit with an error
-  # message.
-  cmpl $0x201ee, %ecx
-  je no_boot_part
-
-  # Add 0x10 to %ecx so it points to the next partition table.
-  add $0x10, %ecx
-  jmp check_part
-
+#check_part:
+#  # Iterate through all 4 partitions of this hard drive
+#  # Check if drive is bootable. If so, check type.
+#  # Otherwise, move on to next partition.
+#  mov $0x80, %al
+#  cmpb (%ecx), %al
+#  je type_check
+#
+#next_part:
+#  # If %ecx is at the last partition already, then there are no
+#  # pintos partitions we can boot from, so we exit with an error
+#  # message.
+#  cmpl $0x201ee, %ecx
+#  je no_boot_part
+#
+#  # Add 0x10 to %ecx so it points to the next partition table.
+#  add $0x10, %ecx
+#  jmp check_part
+#
+#type_check:
+#  # Check to see if the drive has Pintos type (0x20). If so, start
+#  # copying. Otherwise, move to next drive.
+#  movb 0x20, %al
+#  cmpb 0x04(%ecx), %al
+#  jne next_part
+#
+#copy_kernel:
+#  # %ecx points to the start of the partition table
+#  # %dl has the hard disk number
+#
+## Set up the DAP
+#  mov $0x1fff0, %ebx
+#  # DAP[0] = 0x10
+#  movb $0x10, (%ebx)
+#  # DAP[1] = 0
+#  movb $0x00, 1(%ebx)
+#  # DAP[2] = number of sectors (2 bytes)
+#  # We read 64 sectors at a time (since some platforms have
+#  # a limit to number of sectors read at a time). We need
+#  # to read a total of 1024 sectors to load all 512 KiB of
+#  # the kernel.
+#  movw $0x40, 2(%ebx)
+#
+#  # Let %edi point to the starting sector we want to read from.
+#  movl 0x08(%ecx), %edi
+#
+#  # Now let %ecx point to the location in memory to be written to.
+#  movl $0x20000, %ecx
+#
+#copy_loop:
+#  # DAP[4] = sector:offset to buffer. %ecx points to where the data
+#  # should be written to.
+#  movl %ecx, 4(%ebx)
+#  # DAP[8] = start address of sectors to be read. %edi points to where
+#  # the data should be read from in the hard drive.
+#  movl %edi, 8(%ebx)
+#  movl $0x00, 12(%ebx)
+#
+#  # Read the next 64 sectors from the drive and write
+#  # them to (%ecx).
+#  mov $0x42, %ah
+#  mov $0x1fff, %si
+#  mov %si, %ds
+#  mov $0x0000, %si
+#  int $0x13
+#
+#  # Increment %ecx (where the data is written to) and %edi
+#  # (where data is read from) by 64 sectors (32 KiB).
+#  addl $0x8000, %ecx
+#  addl $0x8000, %edi
+#
+#  # Test if %ecx is at 0x20000 + 512 KiB. If yes, then we are done
+#  # copying kernal code and we start running the kernel. Otherwise,
+#  # we continue copying over kernel code
+#  cmpl $0xa0000, %ecx
+#  jne copy_loop
+#
+#  # Start running the kernel.
+#  jmp start
+#
 next_hd:
   # Increment %dl to check the next hard drive
   inc %dl
   jmp check_mbr
 
-no_boot_part:
-  call puts
-  .string "no bootable partition in boot drive. aborting."
-  int $0x18
+#no_boot_part:
+#  call puts
+#  .string "no bootable partition in boot drive. aborting.\r"
+#  int $0x18
+#
 
 unable_to_boot:
   call puts
@@ -197,11 +195,6 @@ unable_to_boot:
 # Use 0x20000 (where the kernel will eventually go) as a temporary buffer
 # for storing what we read from the hard disk.
 
-	call puts
-	.string "\r\rTODO:  IMPLEMENT THE BOOTLOADER\r"
-
-	# Stop the processor.
-	hlt
 
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
