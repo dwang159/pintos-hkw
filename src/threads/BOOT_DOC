@@ -31,6 +31,8 @@ Daniel Wang (dwang@caltech.edu)
 http://en.wikipedia.org/Logical_block_addressing
 http://en.wikipedia.org/wiki/INT_13H
 web.mit.edu/gnu/doc/html/as_7.html
+docs.oracle.com/cd/E19455-01/806-3773/806-3773.pdf
+f.osdev.org/viewtopic.php?f=13&t=18374
 
 			     BOOTLOADER
 			     ==========
@@ -46,8 +48,7 @@ web.mit.edu/gnu/doc/html/as_7.html
 
 We use memory location 0x20000, which is where the kernel eventually goes,
 as a buffer for reading from the disk. This buffer is used for reading MBR
-sectors as well as copying the pintos kernel. We also use the 16 bytes just
-before this region (0x1fff0) as the location for the disk access packet.
+sectors as well as copying the pintos kernel. 
 
 
 ---- ALGORITHMS ----
@@ -84,6 +85,12 @@ report_error():
 >> within the space allotted?  If so, what steps did you take to reduce
 >> the size of your bootstrap code?
 
+Yes. Our first step was to reduce error messages from descriptive to
+single character ones. The second was to try to reuse registers
+more efficiently. The third was changing which registers were
+used for which situation, in order to reduce the number of 
+instructions (e.g. using %esi if we knew we had to do indirect addressing)
+
 ---- RATIONALE ----
 
 >> A4: Why did you choose your final implementation?  Did you encounter
@@ -111,5 +118,10 @@ website.
 
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
-
+Part of why I think assembly is difficult is finding one good, complete one
+stop shop for documentation. Something that has byte sizes, what flags are
+affected by which instructions, restrictions on addressing in real mode, 
+descriptions of directives.
+So have the TAs learn everything ever about assembly, and become that
+one stop shop.
 >> Any other comments?
