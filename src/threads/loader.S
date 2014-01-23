@@ -57,6 +57,7 @@
 # offset: 0x0
 
 # Loop through all hard drives.
+<<<<<<< HEAD
     mov $0x80, %dl
     mov $DAP, %si
     jmp check_mbr
@@ -73,6 +74,24 @@ DAP:
     .word 0x0000
     .word 0x0000
   
+=======
+  mov $0x80, %dl
+  mov $DAP, %si
+  jmp check_mbr
+
+DAP:
+  .byte 0x10        # DAP size
+  .byte 0x00        # unused
+  .byte 0x01        # 1 sector to read
+  .byte 0x00
+  .word 0x0000      # buffer offset is 0
+  .word 0x2000      # buffer segment is 0x2000
+  .word 0x0000 # First sector has LBA 0
+  .word 0x0000 # continuation of LBA
+  .word 0x0000
+  .word 0x0000
+
+>>>>>>> f5026b40eda671c680faf8c09e2e4f54ddea2a1d
 check_mbr:
   # Read the MBR from the drive
   # 0x42 is an extended read sectors through call $0x13
@@ -99,7 +118,8 @@ able_to_boot:
   jne next_hd
 
   # Set %ecx to start of partition entries.
-  leal 0x1be(%ebx), %ecx
+  movl $0x201be, %ecx
+
   # Start checking partitions.
 
 check_part:
@@ -107,7 +127,7 @@ check_part:
   # Check if drive is bootable. If so, check type.
   # Otherwise, move on to next partition.
   mov $0x80, %al
-  cmpb (%ecx), %al
+  cmpb %es:0x01be, %al
   je type_check
 
 next_part:
@@ -124,21 +144,30 @@ no_boot_part:
 boot_part_found:
   # Add 0x10 to %ecx so it points to the next partition table.
   add $0x10, %ecx
+
+  # Add 0x1 to %es so it points to the next partition table.
+  mov %es, %cx
+  inc %cx
+  mov %cx, %es
   jmp check_part
 
 type_check:
   # Check to see if the drive has Pintos type (0x20). If so, start
   # copying. Otherwise, move to next drive.
-  movb 0x20, %al
-  cmpb 0x04(%ecx), %al
+  movb $0x20, %al
+  cmpb %es:0x01c2, %al
   jne next_part
 
-copy_kernel:
-  # %ecx points to the start of the partition table
-  # %dl has the hard disk number
-
-# Set up the DAP
-  mov $DAP, %ebx
+#copy_kernel:
+#  # %ecx points to the start of the partition table
+#  # %dl has the hard disk number
+#
+## Set up the DAP
+#  mov $0x1fff0, %ebx
+#  # DAP[0] = 0x10
+#  movb $0x10, (%ebx)
+#  # DAP[1] = 0
+#  movb $0x00, 1(%ebx)
 #  # DAP[2] = number of sectors (2 bytes)
 #  # We read 64 sectors at a time (since some platforms have
 #  # a limit to number of sectors read at a time). We need
@@ -187,8 +216,6 @@ next_hd:
   # Increment %dl to check the next hard drive
   inc %dl
   jmp check_mbr
-
-
 
 
 # Use 0x20000 (where the kernel will eventually go) as a temporary buffer
