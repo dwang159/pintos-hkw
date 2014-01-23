@@ -58,13 +58,14 @@
 
 # Loop through all hard drives.
   mov $0x80, %dl
-  mov DAP, %si
+  mov $DAP, %si
   jmp check_mbr
 
 DAP:
   .byte 0x10        # DAP size
   .byte 0x00        # unused
   .byte 0x01        # 1 sector to read
+  .byte 0x00
   .word 0x0000      # buffer offset is 0
   .word 0x2000      # buffer segment is 0x2000
   .word 0x0000 # First sector has LBA 0
@@ -90,35 +91,38 @@ check_mbr:
   jne next_hd
 
   # Set %ecx to start of partition entries.
-  leal 0x1be(%ebx), %ecx
+  movl $0x201be, %ecx
+
   # Start checking partitions.
 
-#check_part:
-#  # Iterate through all 4 partitions of this hard drive
-#  # Check if drive is bootable. If so, check type.
-#  # Otherwise, move on to next partition.
-#  mov $0x80, %al
-#  cmpb (%ecx), %al
-#  je type_check
-#
-#next_part:
-#  # If %ecx is at the last partition already, then there are no
-#  # pintos partitions we can boot from, so we exit with an error
-#  # message.
-#  cmpl $0x201ee, %ecx
-#  je no_boot_part
-#
-#  # Add 0x10 to %ecx so it points to the next partition table.
-#  add $0x10, %ecx
-#  jmp check_part
-#
-#type_check:
-#  # Check to see if the drive has Pintos type (0x20). If so, start
-#  # copying. Otherwise, move to next drive.
-#  movb 0x20, %al
-#  cmpb 0x04(%ecx), %al
-#  jne next_part
-#
+check_part:
+  # Iterate through all 4 partitions of this hard drive
+  # Check if drive is bootable. If so, check type.
+  # Otherwise, move on to next partition.
+  mov $0x80, %al
+  cmpb %es:0x01be, %al
+  je type_check
+
+next_part:
+  # If %ecx is at the last partition already, then there are no
+  # pintos partitions we can boot from, so we exit with an error
+  # message.
+  cmpl $0x201ee, %ecx
+  je no_boot_part
+
+  # Add 0x1 to %es so it points to the next partition table.
+  mov %es, %cx
+  inc %cx
+  mov %cx, %es
+  jmp check_part
+
+type_check:
+  # Check to see if the drive has Pintos type (0x20). If so, start
+  # copying. Otherwise, move to next drive.
+  movb $0x20, %al
+  cmpb %es:0x01c2, %al
+  jne next_part
+
 #copy_kernel:
 #  # %ecx points to the start of the partition table
 #  # %dl has the hard disk number
@@ -178,15 +182,15 @@ next_hd:
   inc %dl
   jmp check_mbr
 
-#no_boot_part:
-#  call puts
-#  .string "no bootable partition in boot drive. aborting.\r"
-#  int $0x18
-#
+no_boot_part:
+  call puts
+  .string "a"
+  int $0x18
+
 
 unable_to_boot:
   call puts
-  .string "could not find pintos OS. aborting\r"
+  .string "b"
   int $0x18
 
 # Use 0x20000 (where the kernel will eventually go) as a temporary buffer
