@@ -63,6 +63,9 @@ static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
     Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+/*! Load average for the system */
+static fixed_point_t load_avg = inttofp(0);
+
 static void kernel_thread(thread_func *, void *aux);
 
 static void idle(void *aux UNUSED);
@@ -107,6 +110,7 @@ void thread_init(void) {
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
     initial_thread->nice = 0;
+    initial_thread->recent_cpu = 0;
 }
 
 /*! Starts preemptive thread scheduling by enabling interrupts.
@@ -195,6 +199,9 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     /* Initialize thread. */
     init_thread(t, name, priority);
     t->nice = thread_current()->nice; /* Nice of child is same as parent */
+    t->recent_cpu = thread_current()->recent_cpu;
+    if (thread_mlfqs) /* 4.4 BSD Scheduler */
+        t->priority = new_priority(t->recent_cpu, t->nice);
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -402,16 +409,39 @@ int thread_get_nice(void) {
 
 /*! Returns 100 times the system load average. */
 int thread_get_load_avg(void) {
-    /* Not yet implemented. */
-    return 0;
+    fixed_point_t temp = fpmulint(load_avg, 100);
+    return fptoint(temp);
+}
+
+int new_priority(fixed_point_t recent_cpu, int nice) {
+    int np = PRI_MAX - 2 * nice;
+    recent_cpu = fpdivint(recent_cpu, 4);
+    np -= fptoint(recent_cpu);
+    np = (np > PRI_MAX) ? PRI_MAX : np;
+    np = (np < PRI_MIN) ? PRI_MIN : np;
+    return np;
+}
+
+fixed_point_t new_recent_cpu(fixed_point_t load,
+                             fixed_point_t recent_cpu,
+                             int nice) {
+    /* new_rcpu = (2load)/(2load + 1) * rcpu + nice */
+    fixed_point_t numer = fpmulint(load, 2);
+    fixed_point_t denom = fpaddint(numer, 1);
+    int quot = fpdiv(numer, denom);
+    quot = fpmul(quot, recent_cpu);
+    return fpaddint(quot, nice);
 }
 
 /*! Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
-    /* Not yet implemented. */
-    return 0;
+    struct thread *t = thread_current();
+    fixed_point_t new_rcpu = 
+            new_recent_cpu(load_avg, t->recent_cpu, t->nice); 
+    new_rcpu = fpmulint(new_rcpu, 100);
+    return fptoint(new_rcpu);
 }
-
+
 /*! Idle thread.  Executes when no other thread is ready to run.
 
     The idle thread is initially put on the ready list by thread_start().
@@ -485,7 +515,6 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 
     t->priority = priority;
     t->magic = THREAD_MAGIC;
-
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
@@ -622,9 +651,6 @@ static struct thread *get_highest_ready_thread(void) {
  */
 void yield_if_higher_priority(struct thread *other) {
     struct thread *curr;
-    int highest_priority = PRI_MIN - 1;
-    struct list_elem *e;
-    struct thread *t;
 
     curr = thread_current();
     if (!other) {

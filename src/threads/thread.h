@@ -9,6 +9,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "fixed-point.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -118,6 +119,7 @@ struct thread {
 #endif
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
+    int recent_cpu; /*!< Recent cpu time used (4.4BSD) */
 
     /*! Owned by thread.c. */
     /**@{*/
@@ -167,5 +169,7 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
-#endif /* threads/thread.h */
+int new_priority(fixed_point_t, int);
+fixed_point_t new_recent_cpu(fixed_point_t, fixed_point_t, int);
 
+#endif /* threads/thread.h */
