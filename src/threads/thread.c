@@ -20,9 +20,11 @@
     of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/*! List of processes in THREAD_READY state, that is, processes
-    that are ready to run but not actually running. */
-static struct list ready_list;
+/* This array of list structs contains all processes in the THREAD_READY
+ * state. Each list struct in this array is a list containing all threads
+ * of a single priority, and the index of the list is the priority number.
+ */
+static struct list ready_lists[PRI_MAX - PRI_MIN + 1];
 
 /*! List of all processes.  Processes are added to this list
     when they are first scheduled and removed when they exit. */
@@ -72,6 +74,7 @@ static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
+static struct thread *get_highest_ready_thread(void);
 static void yield_if_higher_priority(struct thread *other);
 
 /*! Initializes the threading system by transforming the code
@@ -86,12 +89,17 @@ static void yield_if_higher_priority(struct thread *other);
 
     It is not safe to call thread_current() until this function finishes. */
 void thread_init(void) {
+    int i;
     ASSERT(intr_get_level() == INTR_OFF);
 
     lock_init(&tid_lock);
-    list_init(&ready_list);
     list_init(&all_list);
     list_init(&sleep_list);
+
+    /* Initialize each list in ready_lists. */
+    for (i = PRI_MIN; i <= PRI_MAX; i++) {
+        list_init(&ready_lists[i]);
+    }
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
@@ -265,7 +273,7 @@ void thread_unblock(struct thread *t) {
 
     old_level = intr_disable();
     ASSERT(t->status == THREAD_BLOCKED);
-    list_push_back(&ready_list, &t->elem);
+    list_push_back(&ready_lists[t->priority], &t->elem);
     t->status = THREAD_READY;
     intr_set_level(old_level);
     if (intr_get_level() == INTR_ON) {
@@ -281,7 +289,7 @@ void thread_wake(struct thread *t) {
 
     old_level = intr_disable();
     ASSERT(t->status == THREAD_SLEEPING);
-    list_push_back(&ready_list, &t->elem);
+    list_push_back(&ready_lists[t->priority], &t->elem);
     t->status = THREAD_READY;
     intr_set_level(old_level);
     if (intr_get_level() == INTR_ON) {
@@ -345,7 +353,7 @@ void thread_yield(void) {
 
     old_level = intr_disable();
     if (cur != idle_thread)
-        list_push_back(&ready_list, &cur->elem);
+        list_push_back(&ready_lists[cur->priority], &cur->elem);
     cur->status = THREAD_READY;
     schedule();
     intr_set_level(old_level);
@@ -502,13 +510,9 @@ static void * alloc_frame(struct thread *t, size_t size) {
 static struct thread *next_thread_to_run(void) {
     struct thread *next_thread = NULL;
 
-    if (list_empty(&ready_list))
+    next_thread = get_highest_ready_thread();
+    if (next_thread == NULL)
         return idle_thread;
-
-    /* Find the ready thread with the highest priority. */
-    next_thread = list_entry(
-            list_max(&ready_list, &thread_cmp, NULL), struct thread, elem);
-    ASSERT(next_thread);
     list_remove(&next_thread->elem);
     return next_thread;
 }
@@ -586,6 +590,24 @@ static tid_t allocate_tid(void) {
     return tid;
 }
 
+/* Returns the thread in the ready queue with the highest priority.
+ * Does NOT pop the thread from the ready queue. Returns NULL if there
+ * are no ready threads. If there are multiple threads with the
+ * highest priority, this returns the first one it sees.
+ */
+static struct thread *get_highest_ready_thread(void) {
+    int i;
+    struct list_elem *e;
+
+    for (i = PRI_MAX; i >= PRI_MIN; i--) {
+        if (list_empty(&ready_lists[i]))
+            continue;
+        e = list_front(&ready_lists[i]);
+        return list_entry(e, struct thread, elem);
+    }
+    return NULL;
+}
+
 /* Checks that the current running thread has the highest priority.
  * This function should be called when a thread is added to the ready list
  * and also when the current thread changes its priority.
@@ -606,10 +628,10 @@ void yield_if_higher_priority(struct thread *other) {
 
     curr = thread_current();
     if (!other) {
-        if (list_empty(&ready_list))
+        other = get_highest_ready_thread();
+        if (other == NULL) {
             return;
-        other = list_entry(
-            list_max(&ready_list, &thread_cmp, NULL), struct thread, elem);
+        }
     }
     ASSERT (other);
     if (other->priority > curr->priority) {
