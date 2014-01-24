@@ -49,6 +49,9 @@ f.osdev.org/viewtopic.php?f=13&t=18374
 We use memory location 0x20000, which is where the kernel eventually goes,
 as a buffer for reading from the disk. This buffer is used for reading MBR
 sectors as well as copying the pintos kernel. 
+We also define a section of memory to hold our DAP, for use with int 0x13.
+We modify this area of memory to change how much the interrupt reads and
+where it begins to read, while keeping some areas constant. 
 
 
 ---- ALGORITHMS ----
@@ -97,6 +100,28 @@ instructions (e.g. using %esi if we knew we had to do indirect addressing)
 >> any major obstacles or difficulties that forced you to change your
 >> approach?  If so, describe the obstacles and how you overcame them.
 
+We found a lot of difficulty in trying to refer to areas of memory using
+the 8(%ebx) syntax familiar to us. Whenever we tried doing this, Bochs would
+hang, with no discernable reason for doing so. We made extensive use of %es in
+combination with an offset in order to reference memory addresses to replace
+this capability. Since %es requires many steps to increment or move literals
+into, we worked around this by setting a variable offset in a register, and
+staying in a relatively small part of memory starting at 0x20000.
+
+In addition, when creating the DAP, we originally attempted to block off a
+small bit of memory immediately before 0x20000, but this proved difficult
+to actually achieve. We then moved to a stack implementation, but this 
+brought up new concerns about modifying the data structure for later reads.
+Finally, we used the .byte and .word directives in combination with a label
+to create a data structure relatively painlessly, with an easy method of
+referencing.
+
+Other than these concerns, we stayed very close to our original ideas, which
+are presented almost unaltered in the pseudocode algorithm. The overall
+design of the bootloader was fairly straightforward; working around bugs,
+limited documentation, and unfamiliarity with real mode were more difficult,
+but overall didn't affect our design greatly.
+
 			   SURVEY QUESTIONS
 			   ================
 
@@ -124,4 +149,6 @@ affected by which instructions, restrictions on addressing in real mode,
 descriptions of directives.
 So have the TAs learn everything ever about assembly, and become that
 one stop shop.
+At the very least, provide more guidance on int 0x13 and the DAP.
+Information on the layout and creation of the DAP took forever to find.
 >> Any other comments?
