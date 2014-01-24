@@ -158,14 +158,12 @@ copy_kernel:
     # Copying 64 at a time, this means that the loop will take
     # 32 iterations
     movb $0x20, %al
+    movb $0x0, %cl
 
     # Store the target offset in EDI
     movw $0x2000, %di
     movw $0x0000, 0x4(%si)
-    movb $0x0, %cl
 copy_loop:
-    call puts
-    .string "1"
     # Invariants:
     #   AL is the loop counter
     #   EDI is the address to write to
@@ -173,14 +171,14 @@ copy_loop:
     #   DS:SI points to the DAP
     #   AH holds the argument for an extended read (0x42)
 
-    movw %di, 0x6(%si)   #Update target in DAP
-    addw $0x0800, %di     # There are 0x100 bytes in each sector,
+    movw %di, 0x6(%si)   # Update target in DAP
+    addw $0x0800, %di     # There are 0x200 bytes in each sector,
                           # and 0x40 sectors read so the target
-                          # should increment by 0x4000
+                          # should increment by 0x8000
 
     movl %ebx, 0x8(%si)  # Change start of sector reads
     movl $0x0, 0xc(%si)  # Keep high bytes 0 still
-    add $0x40, %ebx       # 0x40 sectors read in each iteration,
+    addl $0x40, %ebx       # 0x40 sectors read in each iteration,
                           # so increment the sector to start
                           # reading from by 0x40.
 
