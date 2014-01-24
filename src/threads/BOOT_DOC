@@ -13,11 +13,11 @@ Daniel Kong (dkong@caltech.edu)
 Daniel Wang (dwang@caltech.edu)
 
 >> Specify how many late tokens you are using on this assignment:
-
+We are using one late token.
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL:  http://github.com/dkong1796/pintos_hkw.git
-   commit ...
+   commit:          Tag=project2
 
 ---- PRELIMINARIES ----
 
