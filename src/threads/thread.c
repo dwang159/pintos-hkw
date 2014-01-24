@@ -194,6 +194,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 
     /* Initialize thread. */
     init_thread(t, name, priority);
+    t->nice = thread_current()->nice; /* Nice of child is same as parent */
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -481,7 +482,6 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->status = THREAD_BLOCKED;
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
-    t->nice = thread_current()->nice;  /* Nice of child matches parent*/
 
     t->priority = priority;
     t->magic = THREAD_MAGIC;
