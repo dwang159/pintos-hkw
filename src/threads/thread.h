@@ -15,6 +15,7 @@ enum thread_status {
     THREAD_RUNNING,     /*!< Running thread. */
     THREAD_READY,       /*!< Not running but ready to run. */
     THREAD_BLOCKED,     /*!< Waiting for an event to trigger. */
+    THREAD_SLEEPING,    /*!< Waiting for a number of ticks to pass */
     THREAD_DYING        /*!< About to be destroyed. */
 };
 
@@ -95,9 +96,14 @@ struct thread {
     enum thread_status status;          /*!< Thread state. */
     char name[16];                      /*!< Name (for debugging purposes). */
     uint8_t *stack;                     /*!< Saved stack pointer. */
-    int priority;                       /*!< Priority. */
+    int base_priority;                  /*!< Base priority level. */
+    int priority;                       /*!< Current priority level. */
     struct list_elem allelem;           /*!< List element for all threads list. */
     /**@}*/
+
+    // List element for the waiting list.
+    struct list_elem sleepelem;
+    unsigned int wait_ticks;
 
     /*! Shared between thread.c and synch.c. */
     /**@{*/
@@ -125,14 +131,19 @@ extern bool thread_mlfqs;
 void thread_init(void);
 void thread_start(void);
 
-void thread_tick(void);
+void thread_tick(int64_t ticks);
 void thread_print_stats(void);
 
 typedef void thread_func(void *aux);
 tid_t thread_create(const char *name, int priority, thread_func *, void *);
+bool thread_cmp(struct list_elem *e1, struct list_elem *e2);
 
 void thread_block(void);
 void thread_unblock(struct thread *);
+
+void thread_sleep(void);
+void thread_wake(struct thread *);
+bool sleep_cmp(struct list_elem * e1, struct list_elem * e2);
 
 struct thread *thread_current (void);
 tid_t thread_tid(void);
