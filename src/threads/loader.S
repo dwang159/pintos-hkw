@@ -64,7 +64,7 @@ DAP:
 
     .byte 0x00        # unused
 
-    .word 0x1        # 1 sector to read
+    .word 0x1         # 1 sector to read
 
     .word 0x0000      # buffer offset is 0
 
@@ -115,8 +115,6 @@ next_partition:
     # If %esi is at the last partition already, then there are no
     # pintos partitions we can boot from, so we exit with an error
     # message.
-    call puts
-    .string "hi\r"
     add $0x10, %si    # Move to next ptable entry
     cmp $0x1ee, %si # Compare to end of ptable
     jle p_table_loop   # Keep going through them
@@ -126,7 +124,8 @@ no_boot_part:
     # We have iterated through the partition table with no luck, 
     # so quitting.
     call puts
-    .string "1"
+    .string "1" # Print error code 1 for bootable drive with no 
+                # boot partition
     int $0x18
 
 type_check:
@@ -139,58 +138,65 @@ type_check:
     # je copy kernel    # Else start moving the kernel from this partition
 
 copy_kernel:
+    # Print cp when a paritition has been chosen. (Chose partition)
     call puts 
-    .string "chose part"
+    .string "cp\r"
     # %esi points to the start of the partition entry
     # %dl has the hard disk number
   
-    movl 0x08(%si), %ebx # Save the LBA from the partition entry
+    movl %es:0x08(%si), %ebx # Save the LBA from the partition entry
+    movl %es:0x0c(%si), %ecx  # Save the number of sectors to be loaded
     mov $DAP, %si        # *ESI = DAP
 
-    # We read 64 sectors at a time (since some platforms have
+    # We read 1 sector at a time (since some platforms have
     # a limit to number of sectors read at a time). We need
-    # to read a total of 1024 sectors to load all 512 KiB of
+    # to read a max of 1024 sectors to load all 512 KiB of
     # the kernel.
-    movw $0x40, 0x2(%si)        # Move size to DAP[2]
-
-    # There are 512 bytes in a sector, and 512 KiB to copy 
-    # Thus, there are 2048 sectors to copy.
-    # Copying 64 at a time, this means that the loop will take 
-    # 32 iterations
-    movb 0x20, %al
+    movw $0x01, 0x2(%si)        # Move size to DAP[2]
 
     # Store the target offset in EDI
     movw $0x2000, %di
     movw $0x0000, 0x4(%si)
+
+    # Only move 1024 sectors if more than that exist in the partition
+    cmp $0x400, %ecx
+    jl copy_loop
+    movl $0x400, %ecx
+
 copy_loop:
     # Invariants: 
-    #   AL is the loop counter
+    #   ECX is the loop counter
     #   EDI is the address to write to
     #   EBX holds the LBA to read the first sector from
     #   DS:SI points to the DAP
     #   AH holds the argument for an extended read (0x42)
 
-    movw %di, 0x6(%si)   #Update target in DAP
-    addw $0x0800, %di     # There are 0x100 bytes in each sector,
+    movw %di, 0x6(%si)    #Update target in DAP
+    addw $0x0020, %di     # There are 0x200 bytes in each sector,
                           # and 0x40 sectors read so the target
-                          # should increment by 0x4000
+                          # should increment by 0x8000
 
-    movl %ebx, 0x8(%si)  # Change start of sector reads
-    movl $0x0, 0xc(%si)  # Keep high bytes 0 still  
-    add $0x40, %ebx       # 0x40 sectors read in each iteration,
+    movl %ebx, 0x8(%si)   # Change start of sector reads
+    movl $0x0, 0xc(%si)   # Keep high bytes 0 still  
+    add $0x1, %ebx        # 1 sector read in each iteration,
                           # so increment the sector to start 
-                          # reading from by 0x40.
+                          # reading from.
 
-    # Read the next 64 sectors from the drive and write
-    # them to .
+    # Read the next sector from the drive and write
+    # them to 20000.
+    mov $0x42, %ah
     int $0x13
     jc read_unsuccessful   # IF carry flag, wasn't able to copy
-    
-    dec %cx       # One more batch of sectors copied
+    # Print a '.' after each sector is read
+    call puts
+    .string "."
+    dec %ecx       # One more batch of sectors copied
     jnz copy_loop # End the loop if all 32 batches have been copied
     
+    # Print ld when data has been loaded.
     call puts
-    .string "load successful\r"
+    .string "\rld\r"
+
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
 #### 32-bit linear address into a 16:16 segment:offset address for
