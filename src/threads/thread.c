@@ -98,6 +98,7 @@ void thread_init(void) {
     init_thread(initial_thread, "main", PRI_DEFAULT);
     initial_thread->status = THREAD_RUNNING;
     initial_thread->tid = allocate_tid();
+    initial_thread->nice = 0;
 }
 
 /*! Starts preemptive thread scheduling by enabling interrupts.
@@ -377,14 +378,17 @@ int thread_get_priority(void) {
 }
 
 /*! Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED) {
-    /* Not yet implemented. */
+void thread_set_nice(int nice) {
+    /* If the attempted nice value passed is not in range [-20, 20],
+     * convert it to be so. */
+    nice = (nice >= -20) ? nice : -20;
+    nice = (nice <= 20) ? nice : 20;
+    thread_current()->nice = nice; 
 }
 
 /*! Returns the current thread's nice value. */
 int thread_get_nice(void) {
-    /* Not yet implemented. */
-    return 0;
+    return thread_current()->nice;
 }
 
 /*! Returns 100 times the system load average. */
@@ -469,8 +473,11 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->status = THREAD_BLOCKED;
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
+    t->nice = thread_current()->nice;  /* Nice of child matches parent*/
+
     t->priority = priority;
     t->magic = THREAD_MAGIC;
+
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);

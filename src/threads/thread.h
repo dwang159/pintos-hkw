@@ -117,6 +117,8 @@ struct thread {
     /**@{*/
 #endif
 
+    int nice;  /*!< Nice value for the 4.4BSD Scheduler */
+
     /*! Owned by thread.c. */
     /**@{*/
     unsigned magic;                     /* Detects stack overflow. */
