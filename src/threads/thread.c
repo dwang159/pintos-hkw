@@ -28,6 +28,9 @@ static struct list ready_list;
     when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of sleeping processes. */
+static struct list sleep_list;
+
 /*! Idle thread. */
 static struct thread *idle_thread;
 
@@ -87,6 +90,7 @@ void thread_init(void) {
     lock_init(&tid_lock);
     list_init(&ready_list);
     list_init(&all_list);
+    list_init(&sleep_list);
 
     /* Set up a thread structure for the running thread. */
     initial_thread = running_thread();
@@ -112,7 +116,7 @@ void thread_start(void) {
 
 /*! Called by the timer interrupt handler at each timer tick.
     Thus, this function runs in an external interrupt context. */
-void thread_tick(void) {
+void thread_tick(int64_t ticks) {
     struct thread *t = thread_current();
 
     /* Update statistics. */
@@ -124,6 +128,16 @@ void thread_tick(void) {
 #endif
     else
         kernel_ticks++;
+
+    struct list_elem *i;
+    for (i = list_begin(&sleep_list); 
+                i != list_end(&sleep_list); i = list_next(i)) {
+        t = list_entry( i, struct thread, sleepelem);
+        if (ticks >= t->wait_ticks) {
+            list_remove(i);
+            thread_wake(t);
+        }
+    }
 
     /* Enforce preemption. */
     if (++thread_ticks >= TIME_SLICE)
@@ -203,6 +217,20 @@ void thread_block(void) {
     schedule();
 }
 
+/* Puts the current thread to sleep on the sleeping list. It will be placed
+ * back on the ready queue after the global ticks value reaches the saved
+ * value in the thread's internal state. 
+ */
+void thread_sleep(void) {
+    ASSERT(!intr_context());
+    ASSERT(intr_get_level() == INTR_OFF);
+
+    struct thread * cur = thread_current();
+    list_push_back(&sleep_list, &cur->sleepelem);
+    cur->status = THREAD_SLEEPING;
+    schedule();
+}
+
 /*! Transitions a blocked thread T to the ready-to-run state.  This is an
     error if T is not blocked.  (Use thread_yield() to make the running
     thread ready.)
@@ -217,6 +245,19 @@ void thread_unblock(struct thread *t) {
 
     old_level = intr_disable();
     ASSERT(t->status == THREAD_BLOCKED);
+    list_push_back(&ready_list, &t->elem);
+    t->status = THREAD_READY;
+    intr_set_level(old_level);
+}
+
+/* Wakes a sleeping thread T into a ready state. */
+void thread_wake(struct thread *t) {
+    enum intr_level old_level;
+
+    ASSERT(is_thread(t));
+
+    old_level = intr_disable();
+    ASSERT(t->status == THREAD_SLEEPING);
     list_push_back(&ready_list, &t->elem);
     t->status = THREAD_READY;
     intr_set_level(old_level);
