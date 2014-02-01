@@ -129,6 +129,7 @@ void thread_tick(int64_t ticks) {
     else
         kernel_ticks++;
 
+    // Iterate through sleeping list, waking up threads if needed
     struct list_elem *i;
     for (i = list_begin(&sleep_list); 
                 i != list_end(&sleep_list); i = list_next(i)) {
@@ -136,7 +137,9 @@ void thread_tick(int64_t ticks) {
         if (ticks >= t->wait_ticks) {
             list_remove(i);
             thread_wake(t);
+            continue;
         }
+        break;
     }
 
     /* Enforce preemption. */
@@ -226,9 +229,14 @@ void thread_sleep(void) {
     ASSERT(intr_get_level() == INTR_OFF);
 
     struct thread * cur = thread_current();
-    list_push_back(&sleep_list, &cur->sleepelem);
+    list_insert_ordered(&sleep_list, &cur->sleepelem, &sleep_cmp, NULL);
     cur->status = THREAD_SLEEPING;
     schedule();
+}
+
+int sleep_cmp(struct list_elem * elem, struct list_elem * e) {
+    return (list_entry(elem, struct thread, sleepelem)->wait_ticks 
+                < list_entry(e, struct thread, sleepelem)->wait_ticks);
 }
 
 /*! Transitions a blocked thread T to the ready-to-run state.  This is an

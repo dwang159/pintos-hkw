@@ -141,6 +141,7 @@ void thread_unblock(struct thread *);
 
 void thread_sleep(void);
 void thread_wake(struct thread *);
+int sleep_cmp(struct list_elem * elem, struct list_elem * e);
 
 struct thread *thread_current (void);
 tid_t thread_tid(void);

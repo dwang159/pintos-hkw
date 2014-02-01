@@ -80,9 +80,11 @@ int64_t timer_elapsed(int64_t then) {
 
 /*! Sleeps for approximately WTICKS timer ticks. */
 void timer_sleep(int64_t wticks) {
-    intr_set_level(INTR_OFF);
+    enum intr_level old_level = intr_disable();
+    // Set thread's wait_ticks to current ticks + wticks.
     thread_current()->wait_ticks = ticks + wticks;
     thread_sleep();
+    intr_set_level(old_level);
 }
 
 /*! Sleeps for approximately MS milliseconds.  Interrupts must be turned on. */
