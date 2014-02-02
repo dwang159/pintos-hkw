@@ -72,6 +72,7 @@ static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
+static void check_highest_priority(struct thread *other);
 
 /*! Initializes the threading system by transforming the code
     that's currently running into a thread.  This can't work in
@@ -256,6 +257,9 @@ void thread_unblock(struct thread *t) {
     list_push_back(&ready_list, &t->elem);
     t->status = THREAD_READY;
     intr_set_level(old_level);
+    if (intr_get_level() == INTR_ON) {
+        check_highest_priority(t);
+    }
 }
 
 /* Wakes a sleeping thread T into a ready state. */
@@ -269,6 +273,9 @@ void thread_wake(struct thread *t) {
     list_push_back(&ready_list, &t->elem);
     t->status = THREAD_READY;
     intr_set_level(old_level);
+    if (intr_get_level() == INTR_ON) {
+        check_highest_priority(t);
+    }
 }
 
 /*! Returns the name of the running thread. */
@@ -350,6 +357,8 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     thread_current()->priority = new_priority;
+    if (intr_get_level() == INTR_ON)
+        check_highest_priority(NULL);
 }
 
 /*! Returns the current thread's priority. */
@@ -568,7 +577,51 @@ static tid_t allocate_tid(void) {
 
     return tid;
 }
-
+
+/* Checks that the current running thread has the highest priority.
+ * This function should be called when a thread is added to the ready list
+ * and also when the current thread changes its priority.
+ *
+ * Expects a pointer to the thread just added to the ready list as the
+ * argument (for O(1) behavior). If the argument is NULL (for the case
+ * where the current thread changed priority), then this function will
+ * scan all elements in the ready list and check priorities.
+ *
+ * If a thread with higher priority is found, then we immediately yield
+ * to the new thread.
+ */
+void check_highest_priority(struct thread *other) {
+    struct thread *curr;
+    int highest_priority = PRI_MIN - 1;
+    struct list_elem *e;
+    struct thread *t;
+    enum intr_level old_level;
+
+    intr_disable();
+    curr = thread_current();
+    if (!other) {
+        if (list_empty(&ready_list))
+            return;
+        for (e = list_begin(&ready_list); e != list_end(&ready_list);
+             e = list_next(e)) {
+            t = list_entry(e, struct thread, elem);
+            if (t->priority > highest_priority) {
+                other = t;
+                highest_priority = t->priority;
+            }
+        }
+    }
+    ASSERT (other);
+    intr_enable();
+    if (other->priority > curr->priority) {
+        if (intr_context()) {
+            intr_yield_on_return();
+        } else {
+            thread_yield();
+        }
+    }
+}
+
 /*! Offset of `stack' member within `struct thread'.
     Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
