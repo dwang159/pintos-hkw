@@ -230,12 +230,17 @@ void thread_sleep(void) {
     ASSERT(intr_get_level() == INTR_OFF);
 
     struct thread * cur = thread_current();
+    // Insert into the sleeping list, maintaining a sorted order by 
+    // ascending wait_ticks values.
     list_insert_ordered(&sleep_list, &cur->sleepelem, &sleep_cmp, NULL);
     cur->status = THREAD_SLEEPING;
     schedule();
 }
 
-int sleep_cmp(struct list_elem * elem, struct list_elem * e) {
+/* Comparison function for inserting into the sleeping list. Compares the
+ * wait_ticks of each element's thread
+ */
+bool sleep_cmp(struct list_elem * elem, struct list_elem * e) {
     return (list_entry(elem, struct thread, sleepelem)->wait_ticks
                 < list_entry(e, struct thread, sleepelem)->wait_ticks);
 }

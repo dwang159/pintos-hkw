@@ -102,7 +102,7 @@ struct thread {
 
     // List element for the waiting list.
     struct list_elem sleepelem;
-    int64_t wait_ticks;
+    unsigned int wait_ticks;
 
     /*! Shared between thread.c and synch.c. */
     /**@{*/
@@ -141,7 +141,7 @@ void thread_unblock(struct thread *);
 
 void thread_sleep(void);
 void thread_wake(struct thread *);
-int sleep_cmp(struct list_elem * elem, struct list_elem * e);
+bool sleep_cmp(struct list_elem * elem, struct list_elem * e);
 
 struct thread *thread_current (void);
 tid_t thread_tid(void);
