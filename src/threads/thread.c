@@ -227,13 +227,13 @@ void thread_block(void) {
  */
 void thread_sleep(void) {
     ASSERT(!intr_context());
-    ASSERT(intr_get_level() == INTR_OFF);
 
     struct thread * cur = thread_current();
+    cur->status = THREAD_SLEEPING;
     // Insert into the sleeping list, maintaining a sorted order by 
     // ascending wait_ticks values.
+    intr_disable();
     list_insert_ordered(&sleep_list, &cur->sleepelem, &sleep_cmp, NULL);
-    cur->status = THREAD_SLEEPING;
     schedule();
 }
 

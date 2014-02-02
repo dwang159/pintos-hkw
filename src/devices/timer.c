@@ -85,10 +85,7 @@ void timer_sleep(int64_t wticks) {
     }
     // Set thread's wait_ticks to current ticks + wticks.
     thread_current()->wait_ticks = ticks + wticks;
-
-    enum intr_level old_level = intr_disable();
     thread_sleep();
-    intr_set_level(old_level);
 }
 
 /*! Sleeps for approximately MS milliseconds.  Interrupts must be turned on. */
