@@ -208,6 +208,14 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     return tid;
 }
 
+/* Returns true if e1 has lower priority than e2. Used to compare
+ * thread priorities.
+ */
+bool thread_cmp(struct list_elem *e1, struct list_elem *e2) {
+    return (list_entry(e1, struct thread, elem)->priority
+            < list_entry(e2, struct thread, elem)->priority);
+}
+
 /*! Puts the current thread to sleep.  It will not be scheduled
     again until awoken by thread_unblock().
 
@@ -230,7 +238,7 @@ void thread_sleep(void) {
 
     struct thread * cur = thread_current();
     cur->status = THREAD_SLEEPING;
-    // Insert into the sleeping list, maintaining a sorted order by 
+    // Insert into the sleeping list, maintaining a sorted order by
     // ascending wait_ticks values.
     intr_disable();
     list_insert_ordered(&sleep_list, &cur->sleepelem, &sleep_cmp, NULL);
@@ -240,9 +248,9 @@ void thread_sleep(void) {
 /* Comparison function for inserting into the sleeping list. Compares the
  * wait_ticks of each element's thread
  */
-bool sleep_cmp(struct list_elem * elem, struct list_elem * e) {
-    return (list_entry(elem, struct thread, sleepelem)->wait_ticks
-                < list_entry(e, struct thread, sleepelem)->wait_ticks);
+bool sleep_cmp(struct list_elem * e1, struct list_elem * e2) {
+    return (list_entry(e1, struct thread, sleepelem)->wait_ticks
+                < list_entry(e2, struct thread, sleepelem)->wait_ticks);
 }
 
 /*! Transitions a blocked thread T to the ready-to-run state.  This is an
@@ -488,23 +496,14 @@ static void * alloc_frame(struct thread *t, size_t size) {
     thread can continue running, then it will be in the run queue.)  If the
     run queue is empty, return idle_thread. */
 static struct thread *next_thread_to_run(void) {
-    int highest_priority = PRI_MIN - 1;
     struct thread *next_thread = NULL;
-    struct list_elem *e;
-    struct thread *t;
 
     if (list_empty(&ready_list))
         return idle_thread;
 
     /* Find the ready thread with the highest priority. */
-    for (e = list_begin(&ready_list); e != list_end(&ready_list);
-         e = list_next(e)) {
-        t = list_entry(e, struct thread, elem);
-        if (t->priority > highest_priority) {
-            next_thread = t;
-            highest_priority = t->priority;
-        }
-    }
+    next_thread = list_entry(
+            list_max(&ready_list, &thread_cmp, NULL), struct thread, elem);
     ASSERT(next_thread);
     list_remove(&next_thread->elem);
     return next_thread;
@@ -600,24 +599,15 @@ void check_highest_priority(struct thread *other) {
     int highest_priority = PRI_MIN - 1;
     struct list_elem *e;
     struct thread *t;
-    enum intr_level old_level;
 
-    intr_disable();
     curr = thread_current();
     if (!other) {
         if (list_empty(&ready_list))
             return;
-        for (e = list_begin(&ready_list); e != list_end(&ready_list);
-             e = list_next(e)) {
-            t = list_entry(e, struct thread, elem);
-            if (t->priority > highest_priority) {
-                other = t;
-                highest_priority = t->priority;
-            }
-        }
+        other = list_entry(
+            list_max(&ready_list, &thread_cmp, NULL), struct thread, elem);
     }
     ASSERT (other);
-    intr_enable();
     if (other->priority > curr->priority) {
         if (intr_context()) {
             intr_yield_on_return();
