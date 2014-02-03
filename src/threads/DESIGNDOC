@@ -1,10 +1,10 @@
- 
+
 			+--------------------+
 			|       CS 124       |
 			| PROJECT 3: THREADS |
 			|   DESIGN DOCUMENT  |
 			+--------------------+
-				   
+
 ---- GROUP ----
 
 >> Fill in the names and email addresses of your group members.
@@ -13,7 +13,7 @@ Tim Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment: 0 
+>> Specify how many late tokens you are using on this assignment: 0
 
 >> What is the Git repository and commit hash for your submission?
 
@@ -44,19 +44,19 @@ In thread struct, added the following members:
 
 sleepelem is used for maintaining a linked list of sleeping threads.
 
-wait_ticks is the number of ticks when the sleeping thread should be awoken. To
-calculate this value, whn a thread sleeps, we add the current tick counter to the
-number of ticks it should wait.
-    
+wait_ticks is the number of ticks when the sleeping thread should be awoken.
+To calculate this value, whn a thread sleeps, we add the current tick counter
+to the number of ticks it should wait.
+
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
-When we call timer_sleep, we disable interrupts, set the thread's wait_ticks 
-to the ticks counter + the number of ticks to sleep, then insert the thread 
-into a sleeping queue. The sleeping queue is kept in a sorted order by 
-ascending wait_ticks values. Finally, we set the thread's status to 
+When we call timer_sleep, we disable interrupts, set the thread's wait_ticks
+to the ticks counter + the number of ticks to sleep, then insert the thread
+into a sleeping queue. The sleeping queue is kept in a sorted order by
+ascending wait_ticks values. Finally, we set the thread's status to
 THREAD_SLEEPING.
 
 In the timer interrupt, we increment the ticks counter, update statistics
