@@ -383,7 +383,15 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's base priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     struct thread *curr = thread_current();
-    curr->base_priority = curr->priority = new_priority;
+    if (curr->base_priority < curr->priority) {
+        if (new_priority >= curr->priority) {
+            curr->base_priority = curr->priority = new_priority;
+        } else {
+            curr->base_priority = new_priority;
+        }
+    } else {
+        curr->base_priority = curr->priority = new_priority;
+    }
     if (intr_get_level() == INTR_ON)
         yield_if_higher_priority(NULL);
 }
@@ -475,7 +483,7 @@ void thread_set_nice(int nice) {
      * convert it to be so. */
     nice = (nice >= -20) ? nice : -20;
     nice = (nice <= 20) ? nice : 20;
-    thread_current()->nice = nice; 
+    thread_current()->nice = nice;
 }
 
 /*! Returns the current thread's nice value. */
@@ -512,8 +520,8 @@ fixed_point_t new_recent_cpu(fixed_point_t load,
 /*! Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
     struct thread *t = thread_current();
-    fixed_point_t new_rcpu = 
-            new_recent_cpu(load_avg, t->recent_cpu, t->nice); 
+    fixed_point_t new_rcpu =
+            new_recent_cpu(load_avg, t->recent_cpu, t->nice);
     new_rcpu = fpmulint(new_rcpu, 100);
     return fptoint(new_rcpu);
 }
