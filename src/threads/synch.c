@@ -191,6 +191,8 @@ void lock_acquire(struct lock *lock) {
     ASSERT(!lock_held_by_current_thread(lock));
 
     thread_current()->lock_requested = lock;
+    if (lock->holder)
+        thread_donate_priority(lock->holder, thread_current()->priority);
     sema_down(&lock->semaphore);
     thread_current()->lock_requested = NULL;
     lock->holder = thread_current();
@@ -225,6 +227,11 @@ void lock_release(struct lock *lock) {
     ASSERT(lock_held_by_current_thread(lock));
 
     lock->holder = NULL;
+    /* When we call sema_up, a thread waiting for this lock is woken.
+     * However, we know that the thread holding the lock has priority
+     * at least as high as the highest waiting thread, so it
+     * will not yield when the new thread is woken up.
+     */
     sema_up(&lock->semaphore);
     thread_reset_priority();
 }
