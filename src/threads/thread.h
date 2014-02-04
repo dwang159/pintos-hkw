@@ -93,13 +93,15 @@ typedef int tid_t;
 struct thread {
     /*! Owned by thread.c. */
     /**@{*/
-    tid_t tid;                          /*!< Thread identifier. */
-    enum thread_status status;          /*!< Thread state. */
-    char name[16];                      /*!< Name (for debugging purposes). */
-    uint8_t *stack;                     /*!< Saved stack pointer. */
-    int base_priority;                  /*!< Base priority level. */
-    int priority;                       /*!< Current priority level. */
-    struct list_elem allelem;           /*!< List element for all threads list. */
+    tid_t tid;                    /* Thread identifier. */
+    enum thread_status status;    /* Thread state. */
+    char name[16];                /* Name (for debugging purposes). */
+    uint8_t *stack;               /* Saved stack pointer. */
+    int base_priority;            /* Base priority level. */
+    int priority;                 /* Current priority level. */
+    struct list_elem allelem;     /* List element for all threads list. */
+    struct list locks_held;       /* Locks held by this thread. */
+    struct lock *lock_requested;  /* Lock the thread needs, otherwise NULL. */
     /**@}*/
 
     // List element for the waiting list.
@@ -158,11 +160,12 @@ void thread_yield(void);
 
 /*! Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func(struct thread *t, void *aux);
-
 void thread_foreach(thread_action_func *, void *);
 
 int thread_get_priority(void);
 void thread_set_priority(int);
+void thread_reset_priority(void);
+void thread_donate_priority(struct thread *, int);
 
 int thread_get_nice(void);
 void thread_set_nice(int);

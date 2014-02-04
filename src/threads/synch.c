@@ -175,6 +175,7 @@ void lock_init(struct lock *lock) {
 
     lock->holder = NULL;
     sema_init(&lock->semaphore, 1);
+    lock->highest_wait_priority = PRI_MIN - 1;
 }
 
 /*! Acquires LOCK, sleeping until it becomes available if
@@ -190,8 +191,19 @@ void lock_acquire(struct lock *lock) {
     ASSERT(!intr_context());
     ASSERT(!lock_held_by_current_thread(lock));
 
+    struct thread *curr = thread_current();
+
+    curr->lock_requested = lock;
+    if (lock->holder) {
+        thread_donate_priority(lock->holder, curr->priority);
+        if (curr->priority > lock->highest_wait_priority) {
+            lock->highest_wait_priority = curr->priority;
+        }
+    }
     sema_down(&lock->semaphore);
-    lock->holder = thread_current();
+    curr->lock_requested = NULL;
+    lock->holder = curr;
+    list_push_back(&curr->locks_held, &lock->elem);
 }
 
 /*! Tries to acquires LOCK and returns true if successful or false
@@ -219,11 +231,33 @@ bool lock_try_acquire(struct lock *lock) {
     make sense to try to release a lock within an interrupt
     handler. */
 void lock_release(struct lock *lock) {
+    struct thread *t;
+    struct list_elem *e;
+
     ASSERT(lock != NULL);
     ASSERT(lock_held_by_current_thread(lock));
 
     lock->holder = NULL;
+    list_remove(&lock->elem);
+
+    /* When we call sema_up, a thread waiting for this lock is woken.
+     * However, we know that the thread holding the lock has priority
+     * at least as high as the highest waiting thread, so it
+     * will not yield when the new thread is woken up.
+     */
     sema_up(&lock->semaphore);
+
+    /* Set the highest_wait_priority to the maximum of the threads still
+     * waiting on this lock.
+     */
+    if (list_empty(&lock->semaphore.waiters)) {
+        lock->highest_wait_priority = PRI_MIN - 1;
+    } else {
+        e = list_max(&lock->semaphore.waiters, &thread_cmp, NULL);
+        t = list_entry(e, struct thread, elem);
+        lock->highest_wait_priority = t->priority;
+    }
+    thread_reset_priority();
 }
 
 /*! Returns true if the current thread holds LOCK, false
