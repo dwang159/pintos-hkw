@@ -90,8 +90,7 @@ bool sema_try_down(struct semaphore *sema) {
     if (sema->value > 0) {
         sema->value--;
         success = true;
-    }
-    else {
+    } else {
       success = false;
     }
     intr_set_level(old_level);
@@ -193,6 +192,7 @@ void lock_acquire(struct lock *lock) {
 
     struct thread *curr = thread_current();
 
+    /* Trying to acquire the lock. */
     curr->lock_requested = lock;
     if (lock->holder) {
         thread_donate_priority(lock->holder, curr->priority);
@@ -201,6 +201,7 @@ void lock_acquire(struct lock *lock) {
         }
     }
     sema_down(&lock->semaphore);
+    /* We've acquired the lock. */
     curr->lock_requested = NULL;
     lock->holder = curr;
     list_push_back(&curr->locks_held, &lock->elem);
@@ -219,8 +220,10 @@ bool lock_try_acquire(struct lock *lock) {
     ASSERT(!lock_held_by_current_thread(lock));
 
     success = sema_try_down(&lock->semaphore);
-    if (success)
-      lock->holder = thread_current();
+    if (success) {
+        lock->holder = thread_current();
+        list_push_back(&thread_current()->locks_held, &lock->elem);
+    }
 
     return success;
 }

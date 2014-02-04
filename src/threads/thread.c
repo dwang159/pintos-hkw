@@ -453,9 +453,14 @@ void thread_donate_priority(struct thread *receiver, int new_priority) {
     case THREAD_BLOCKED:
         /* If the receiving thread is blocked because it is waiting on
          * a lock owned by another thread, then we also need to elevate
-         * the priority of the thread it is waiting on.
+         * the priority of the thread it is waiting on. We also may need
+         * to update the lock's highest_wait_priority.
          */
         if (receiver->lock_requested) {
+            if (receiver->lock_requested->highest_wait_priority <
+                    new_priority) {
+                receiver->lock_requested->highest_wait_priority = new_priority;
+            }
             next = receiver->lock_requested->holder;
             thread_donate_priority(next, new_priority);
         }
