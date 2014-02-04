@@ -190,7 +190,9 @@ void lock_acquire(struct lock *lock) {
     ASSERT(!intr_context());
     ASSERT(!lock_held_by_current_thread(lock));
 
+    thread_current()->lock_requested = lock;
     sema_down(&lock->semaphore);
+    thread_current()->lock_requested = NULL;
     lock->holder = thread_current();
 }
 
@@ -224,6 +226,7 @@ void lock_release(struct lock *lock) {
 
     lock->holder = NULL;
     sema_up(&lock->semaphore);
+    thread_reset_priority();
 }
 
 /*! Returns true if the current thread holds LOCK, false
