@@ -72,7 +72,7 @@ static void *alloc_frame(struct thread *, size_t size);
 static void schedule(void);
 void thread_schedule_tail(struct thread *prev);
 static tid_t allocate_tid(void);
-static void check_highest_priority(struct thread *other);
+static void yield_if_higher_priority(struct thread *other);
 
 /*! Initializes the threading system by transforming the code
     that's currently running into a thread.  This can't work in
@@ -268,7 +268,7 @@ void thread_unblock(struct thread *t) {
     t->status = THREAD_READY;
     intr_set_level(old_level);
     if (intr_get_level() == INTR_ON) {
-        check_highest_priority(t);
+        yield_if_higher_priority(t);
     }
 }
 
@@ -284,7 +284,7 @@ void thread_wake(struct thread *t) {
     t->status = THREAD_READY;
     intr_set_level(old_level);
     if (intr_get_level() == INTR_ON) {
-        check_highest_priority(t);
+        yield_if_higher_priority(t);
     }
 }
 
@@ -368,7 +368,7 @@ void thread_foreach(thread_action_func *func, void *aux) {
 void thread_set_priority(int new_priority) {
     thread_current()->priority = new_priority;
     if (intr_get_level() == INTR_ON)
-        check_highest_priority(NULL);
+        yield_if_higher_priority(NULL);
 }
 
 /*! Returns the current thread's priority. */
@@ -591,7 +591,7 @@ static tid_t allocate_tid(void) {
  * If a thread with higher priority is found, then we immediately yield
  * to the new thread.
  */
-void check_highest_priority(struct thread *other) {
+void yield_if_higher_priority(struct thread *other) {
     struct thread *curr;
     int highest_priority = PRI_MIN - 1;
     struct list_elem *e;
