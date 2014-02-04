@@ -238,21 +238,25 @@ void lock_release(struct lock *lock) {
     ASSERT(lock_held_by_current_thread(lock));
 
     lock->holder = NULL;
+    list_remove(&lock->elem);
+
     /* When we call sema_up, a thread waiting for this lock is woken.
      * However, we know that the thread holding the lock has priority
      * at least as high as the highest waiting thread, so it
      * will not yield when the new thread is woken up.
      */
     sema_up(&lock->semaphore);
-    list_remove(&lock->elem);
 
     /* Set the highest_wait_priority to the maximum of the threads still
      * waiting on this lock.
      */
-    e = list_max(&lock->semaphore.waiters, &thread_cmp, NULL);
-    t = list_entry(e, struct thread, elem);
-    lock->highest_wait_priority = t->priority;
-
+    if (list_empty(&lock->semaphore.waiters)) {
+        lock->highest_wait_priority = PRI_MIN - 1;
+    } else {
+        e = list_max(&lock->semaphore.waiters, &thread_cmp, NULL);
+        t = list_entry(e, struct thread, elem);
+        lock->highest_wait_priority = t->priority;
+    }
     thread_reset_priority();
 }
 
