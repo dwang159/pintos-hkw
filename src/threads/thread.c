@@ -379,10 +379,34 @@ void thread_set_priority(int new_priority) {
         yield_if_higher_priority(NULL);
 }
 
-/* Reset's the current thread's priority to its base priority. */
+/* Reset's the current thread's priority after releasing a lock. If
+ * the thread holds other locks, then we set the priority to the
+ * highest of the threads waiting on its other locks. Otherwise we
+ * reset it to the base priority.
+ */
 void thread_reset_priority() {
     struct thread *curr = thread_current();
-    thread_set_priority(curr->base_priority);
+    int highest_priority = PRI_MIN - 1;
+    struct list_elem *e;
+    struct lock *l;
+
+    for (e = list_begin(&curr->locks_held);
+            e != list_end(&curr->locks_held);
+            e = list_next(e)) {
+        l = list_entry(e, struct lock, elem);
+        if (l->highest_wait_priority > highest_priority)
+            highest_priority = l->highest_wait_priority;
+    }
+    /* The priority should never be smaller than the base priority.
+     * This also handles the case where there are no other locks.
+     */
+    if (curr->base_priority > highest_priority) {
+        highest_priority = curr->base_priority;
+    }
+
+    curr->priority = highest_priority;
+    if (intr_get_level() == INTR_ON)
+        yield_if_higher_priority(NULL);
 }
 
 /* Temporarily elevates the receiving thread's priority to new_priority.
@@ -532,6 +556,8 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->base_priority = t->priority = priority;
     t->lock_requested = NULL;
     t->magic = THREAD_MAGIC;
+
+    list_init(&t->locks_held);
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
