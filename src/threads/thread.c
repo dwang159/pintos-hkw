@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -158,9 +159,9 @@ void thread_tick(int64_t ticks) {
     // the advanced scheduler
     if (thread_mlfqs) {
         if (timer_ticks() % 4 == 0) {
-            listelem *l;
-            for (l = all_list->head; l != all_list->tail; l = l->next) {
-                t = list_entry(l, struct thread, elem);
+            for (i = list_begin(&all_list); i != list_end(&all_list); 
+                i = list_next(i)) {
+                t = list_entry(i, struct thread, elem);
                 t->recent_cpu = new_recent_cpu(load_avg, 
                                                fpaddint(t->recent_cpu, 1),
                                                t->nice);
@@ -178,8 +179,9 @@ void thread_tick(int64_t ticks) {
 
 int ready_lists_size() {
     int num_ready = 0;
-    for (int i = 0; i < PRI_NUM; i++) {
-        num_ready += list_size(ready_lists[i];
+    int i;
+    for (i = 0; i < PRI_NUM; i++) {
+        num_ready += list_size(&ready_lists[i]);
     }
     return num_ready;
 }
@@ -221,7 +223,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 
     /* Initialize thread. */
     init_thread(t, name, priority);
-    t->nice = get_nice(); /* Nice of child is same as parent */
+    t->nice = thread_get_nice(); /* Nice of child is same as parent */
     t->recent_cpu = thread_current()->recent_cpu;
     if (thread_mlfqs) /* 4.4 BSD Scheduler */
         t->priority = new_priority(t->recent_cpu, t->nice);

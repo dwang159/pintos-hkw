@@ -177,4 +177,5 @@ int new_priority(fixed_point_t recent_cpu, int nice);
 fixed_point_t new_recent_cpu(fixed_point_t, fixed_point_t, int);
 fixed_point_t new_load_avg(fixed_point_t ola, int num_ready);
 
+int ready_lists_size(void);
 #endif /* threads/thread.h */
