@@ -20,9 +20,8 @@
     of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* This array of list structs contains all processes in the THREAD_READY
- * state. Each list struct in this array is a list containing all threads
- * of a single priority, and the index of the list is the priority number.
+/* The ready queue is implemented as an array of list structs, where the
+ * index of the list struct corresponds to a thread's priority.
  */
 static struct list ready_lists[PRI_NUM];
 
@@ -405,11 +404,101 @@ void thread_foreach(thread_action_func *func, void *aux) {
     }
 }
 
-/*! Sets the current thread's priority to NEW_PRIORITY. */
+/*! Sets the current thread's base priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
-    thread_current()->priority = new_priority;
+    struct thread *curr = thread_current();
+    if (curr->base_priority < curr->priority) {
+        if (new_priority >= curr->priority) {
+            curr->base_priority = curr->priority = new_priority;
+        } else {
+            curr->base_priority = new_priority;
+        }
+    } else {
+        curr->base_priority = curr->priority = new_priority;
+    }
     if (intr_get_level() == INTR_ON)
         yield_if_higher_priority(NULL);
+}
+
+/* Reset's the current thread's priority after releasing a lock. If
+ * the thread holds other locks, then we set the priority to the
+ * highest of the threads waiting on its other locks. Otherwise we
+ * reset it to the base priority.
+ */
+void thread_reset_priority() {
+    struct thread *curr = thread_current();
+    int highest_priority = PRI_MIN - 1;
+    struct list_elem *e;
+    struct lock *l;
+
+    for (e = list_begin(&curr->locks_held);
+            e != list_end(&curr->locks_held);
+            e = list_next(e)) {
+        l = list_entry(e, struct lock, elem);
+        if (l->highest_wait_priority > highest_priority)
+            highest_priority = l->highest_wait_priority;
+    }
+    /* The priority should never be smaller than the base priority.
+     * This also handles the case where there are no other locks.
+     */
+    if (curr->base_priority > highest_priority) {
+        highest_priority = curr->base_priority;
+    }
+
+    curr->priority = highest_priority;
+    if (intr_get_level() == INTR_ON)
+        yield_if_higher_priority(NULL);
+}
+
+/* Temporarily elevates the receiving thread's priority to new_priority.
+ * If new_priority is less than the receiving thread's current priority, it
+ * does nothing.
+ */
+void thread_donate_priority(struct thread *receiver, int new_priority) {
+    struct thread *next;
+
+    ASSERT(is_thread(receiver));
+    if (new_priority <= receiver->priority)
+        return;
+
+    /* Raise the priority to the new priority. This does not change
+     * the base priority.
+     */
+    receiver->priority = new_priority;
+
+    switch (receiver->status) {
+    case THREAD_READY:
+        /* Remove the thread from its current list in the ready queue
+         * and add it to the new list.
+         */
+        list_remove(&receiver->elem);
+        list_push_back(&ready_lists[receiver->priority], &receiver->elem);
+        break;
+    case THREAD_BLOCKED:
+        /* If the receiving thread is blocked because it is waiting on
+         * a lock owned by another thread, then we also need to elevate
+         * the priority of the thread it is waiting on. We also may need
+         * to update the lock's highest_wait_priority.
+         */
+        if (receiver->lock_requested) {
+            if (receiver->lock_requested->highest_wait_priority <
+                    new_priority) {
+                receiver->lock_requested->highest_wait_priority = new_priority;
+            }
+            next = receiver->lock_requested->holder;
+            thread_donate_priority(next, new_priority);
+        }
+        break;
+    case THREAD_SLEEPING:
+        /* Do nothing; when it wakes up everything will be good. */
+        break;
+    default:
+        /* This function should never need to be called on a thread
+         * that is in the state THREAD_RUNNING (it shouldn't be donating
+         * priority to itself) or THREAD_DYING.
+         */
+        ASSERT(false);
+    }
 }
 
 /*! Returns the current thread's priority. */
@@ -423,7 +512,7 @@ void thread_set_nice(int nice) {
      * convert it to be so. */
     nice = (nice >= -20) ? nice : -20;
     nice = (nice <= 20) ? nice : 20;
-    thread_current()->nice = nice; 
+    thread_current()->nice = nice;
 }
 
 /*! Returns the current thread's nice value. */
@@ -542,9 +631,11 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->status = THREAD_BLOCKED;
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
-
-    t->priority = priority;
+    t->base_priority = t->priority = priority;
+    t->lock_requested = NULL;
     t->magic = THREAD_MAGIC;
+
+    list_init(&t->locks_held);
 
     old_level = intr_disable();
     list_push_back(&all_list, &t->allelem);
