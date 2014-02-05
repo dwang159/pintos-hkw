@@ -24,7 +24,7 @@
  * state. Each list struct in this array is a list containing all threads
  * of a single priority, and the index of the list is the priority number.
  */
-static struct list ready_lists[PRI_MAX - PRI_MIN + 1];
+static struct list ready_lists[PRI_NUM];
 
 /*! List of all processes.  Processes are added to this list
     when they are first scheduled and removed when they exit. */
@@ -155,10 +155,34 @@ void thread_tick(int64_t ticks) {
         }
         break;
     }
+    // Update the priority, system load, and recent_cpu in
+    // the advanced scheduler
+    if (thread_mlfqs) {
+        if (timer_ticks() % 4 == 0) {
+            listelem *l;
+            for (l = all_list->head; l != all_list->tail; l = l->next) {
+                t = list_entry(l, struct thread, elem);
+                t->recent_cpu = new_recent_cpu(load_avg, 
+                                               fpaddint(t->recent_cpu, 1),
+                                               t->nice);
+                t->priority = new_priority(t->recent_cpu, t->nice);
+            }
+        }
+        if (timer_ticks() % TIMER_FREQ == 0)
+            load_avg = new_load_avg(load_avg, ready_lists_size());
+    }
 
     /* Enforce preemption. */
     if (++thread_ticks >= TIME_SLICE)
         intr_yield_on_return();
+}
+
+int ready_lists_size() {
+    int num_ready = 0;
+    for (int i = 0; i < PRI_NUM; i++) {
+        num_ready += list_size(ready_lists[i];
+    }
+    return num_ready;
 }
 
 /*! Prints thread statistics. */
@@ -198,7 +222,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 
     /* Initialize thread. */
     init_thread(t, name, priority);
-    t->nice = thread_current()->nice; /* Nice of child is same as parent */
+    t->nice = get_nice(); /* Nice of child is same as parent */
     t->recent_cpu = thread_current()->recent_cpu;
     if (thread_mlfqs) /* 4.4 BSD Scheduler */
         t->priority = new_priority(t->recent_cpu, t->nice);
@@ -422,6 +446,12 @@ int new_priority(fixed_point_t recent_cpu, int nice) {
     return np;
 }
 
+fixed_point_t new_load_avg(fixed_point_t ola, int num_ready) {
+    fixed_point_t numer = fpmulint(ola, 59);
+    numer = fpaddint(numer, num_ready);
+    return fpdivint(numer, 60);
+}
+
 fixed_point_t new_recent_cpu(fixed_point_t load,
                              fixed_point_t recent_cpu,
                              int nice) {
@@ -436,8 +466,8 @@ fixed_point_t new_recent_cpu(fixed_point_t load,
 /*! Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
     struct thread *t = thread_current();
-    fixed_point_t new_rcpu = 
-            new_recent_cpu(load_avg, t->recent_cpu, t->nice); 
+    fixed_point_t new_rcpu =
+            new_recent_cpu(load_avg, t->recent_cpu, t->nice);
     new_rcpu = fpmulint(new_rcpu, 100);
     return fptoint(new_rcpu);
 }
@@ -482,7 +512,7 @@ static void kernel_thread(thread_func *function, void *aux) {
     function(aux);       /* Execute the thread function. */
     thread_exit();       /* If function() returns, kill the thread. */
 }
-
+
 /*! Returns the running thread. */
 struct thread * running_thread(void) {
     uint32_t *esp;

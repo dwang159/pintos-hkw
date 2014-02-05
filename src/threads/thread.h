@@ -29,6 +29,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /*!< Lowest priority. */
 #define PRI_DEFAULT 31                  /*!< Default priority. */
 #define PRI_MAX 63                      /*!< Highest priority. */
+#define PRI_NUM (PRI_MAX - PRI_MIN + 1)
 
 /*! A kernel thread or user process.
 
@@ -169,7 +170,8 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
-int new_priority(fixed_point_t, int);
+int new_priority(fixed_point_t recent_cpu, int nice);
 fixed_point_t new_recent_cpu(fixed_point_t, fixed_point_t, int);
+fixed_point_t new_load_avg(fixed_point_t ola, int num_ready);
 
 #endif /* threads/thread.h */
