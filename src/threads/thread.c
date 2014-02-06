@@ -167,7 +167,10 @@ void thread_tick(int64_t ticks) {
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
-     //       printf("Load_avg: %d\n", thread_get_load_avg());
+            yield_if_higher_priority(NULL);
+        }
+        if (timer_ticks() % TIMER_FREQ == 0) {
+            /* Update the load average on the second. */
             update_load_avg(ready_lists_size() + 1);
             thread_foreach(update_recent_cpu, NULL);
         }
@@ -564,6 +567,9 @@ void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
 }
 
 void update_load_avg(int num_ready) {
+    if (thread_current() == idle_thread) {
+        num_ready = 0;
+    }
     fixed_point_t numer = fpmulint(load_avg, 59);
     num_ready = thread_current() == idle_thread ? 0 : num_ready;
     numer = fpaddint(numer, num_ready);
