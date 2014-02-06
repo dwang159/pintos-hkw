@@ -159,17 +159,14 @@ void thread_tick(int64_t ticks) {
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
-        printf("Timer went off\n");
         t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
-            printf("\tTimer mult of 4\n");
             thread_foreach(update_priority, NULL);
-            yield_if_higher_priority(t);
+            yield_if_higher_priority(NULL);
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
-            printf("Timer says one second\n");
-            update_load_avg(ready_lists_size());
+            update_load_avg(ready_lists_size() + 1);
             thread_foreach(update_recent_cpu, NULL);
         }
     }
@@ -561,6 +558,9 @@ void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
 }
 
 void update_load_avg(int num_ready) {
+    if (thread_current() == idle_thread) {
+        num_ready = 0;
+    }
     fixed_point_t numer = fpmulint(load_avg, 59);
     numer = fpaddint(numer, num_ready);
     load_avg = fpdivint(numer, 60);
