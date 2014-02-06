@@ -17,4 +17,6 @@ typedef int fixed_point_t;
 #define fpdiv(x, y)    ((fixed_point_t) ((int64_t )x) * FP_SCALE / y)
 #define fpdivint(x, n) (x / n)
 
+#define dectofp(d) (fpdivint(inttofp(d), 100))
+
 #endif /* FIXED_POINT_H */

@@ -146,7 +146,8 @@ void thread_tick(int64_t ticks) {
     // Iterate through sleeping list, waking up threads if needed
     struct list_elem *i;
     for (i = list_begin(&sleep_list);
-                i != list_end(&sleep_list); i = list_next(i)) {
+         i != list_end(&sleep_list); 
+         i = list_next(i)) {
         t = list_entry( i, struct thread, sleepelem);
         if (ticks >= t->wait_ticks) {
             list_remove(i);
@@ -158,18 +159,19 @@ void thread_tick(int64_t ticks) {
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
+        printf("Timer went off\n");
+        t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
-            for (i = list_begin(&all_list); i != list_end(&all_list); 
-                i = list_next(i)) {
-                t = list_entry(i, struct thread, elem);
-                t->recent_cpu = new_recent_cpu(load_avg, 
-                                               fpaddint(t->recent_cpu, 1),
-                                               t->nice);
-                t->priority = new_priority(t->recent_cpu, t->nice);
-            }
+            printf("\tTimer mult of 4\n");
+            thread_foreach(update_priority, NULL);
+            yield_if_higher_priority(t);
         }
-        if (timer_ticks() % TIMER_FREQ == 0)
-            load_avg = new_load_avg(load_avg, ready_lists_size());
+        if (timer_ticks() % TIMER_FREQ == 0) {
+            /* Update the load average on the second. */
+            printf("Timer says one second\n");
+            update_load_avg(ready_lists_size());
+            thread_foreach(update_recent_cpu, NULL);
+        }
     }
 
     /* Enforce preemption. */
@@ -179,9 +181,9 @@ void thread_tick(int64_t ticks) {
 
 int ready_lists_size() {
     int num_ready = 0;
-    int i;
-    for (i = 0; i < PRI_NUM; i++) {
-        num_ready += list_size(&ready_lists[i]);
+    int pri;
+    for (pri = 0; pri < PRI_NUM; pri++) {
+        num_ready += list_size(&ready_lists[pri]);
     }
     return num_ready;
 }
@@ -226,7 +228,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     t->nice = thread_get_nice(); /* Nice of child is same as parent */
     t->recent_cpu = thread_current()->recent_cpu;
     if (thread_mlfqs) /* 4.4 BSD Scheduler */
-        t->priority = new_priority(t->recent_cpu, t->nice);
+        update_priority(t, NULL);
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
@@ -253,7 +255,9 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 /* Returns true if e1 has lower priority than e2. Used to compare
  * thread priorities.
  */
-bool thread_cmp(struct list_elem *e1, struct list_elem *e2) {
+bool thread_cmp(const struct list_elem *e1, 
+                const struct list_elem *e2, 
+                void*aux_ UNUSED) {
     return (list_entry(e1, struct thread, elem)->priority
             < list_entry(e2, struct thread, elem)->priority);
 }
@@ -290,7 +294,9 @@ void thread_sleep(void) {
 /* Comparison function for inserting into the sleeping list. Compares the
  * wait_ticks of each element's thread
  */
-bool sleep_cmp(struct list_elem * e1, struct list_elem * e2) {
+bool sleep_cmp(const struct list_elem * e1, 
+               const struct list_elem * e2, 
+               void * aux_ UNUSED) {
     return (list_entry(e1, struct thread, sleepelem)->wait_ticks
                 < list_entry(e2, struct thread, sleepelem)->wait_ticks);
 }
@@ -408,6 +414,9 @@ void thread_foreach(thread_action_func *func, void *aux) {
 
 /*! Sets the current thread's base priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
+    /* Calls to thread_set_priority are ignored in 4.4BSD */
+    if (thread_mlfqs) 
+        return;
     struct thread *curr = thread_current();
     if (curr->base_priority < curr->priority) {
         if (new_priority >= curr->priority) {
@@ -514,7 +523,10 @@ void thread_set_nice(int nice) {
      * convert it to be so. */
     nice = (nice >= -20) ? nice : -20;
     nice = (nice <= 20) ? nice : 20;
-    thread_current()->nice = nice;
+    struct thread *t = thread_current();
+    t->nice = nice;
+    update_priority(t, NULL);
+    yield_if_higher_priority(t);
 }
 
 /*! Returns the current thread's nice value. */
@@ -528,38 +540,36 @@ int thread_get_load_avg(void) {
     return fptoint(temp);
 }
 
-int new_priority(fixed_point_t recent_cpu, int nice) {
+void update_priority(struct thread *t, void *aux_ UNUSED) {
+    fixed_point_t rcpu = t->recent_cpu;
+    int nice = t->nice;
     int np = PRI_MAX - 2 * nice;
-    recent_cpu = fpdivint(recent_cpu, 4);
-    np -= fptoint(recent_cpu);
+    rcpu = fpdivint(rcpu, 4);
+    np -= fptoint(rcpu);
     np = (np > PRI_MAX) ? PRI_MAX : np;
     np = (np < PRI_MIN) ? PRI_MIN : np;
-    return np;
+    t->priority = np;
 }
 
-fixed_point_t new_load_avg(fixed_point_t ola, int num_ready) {
-    fixed_point_t numer = fpmulint(ola, 59);
-    numer = fpaddint(numer, num_ready);
-    return fpdivint(numer, 60);
-}
-
-fixed_point_t new_recent_cpu(fixed_point_t load,
-                             fixed_point_t recent_cpu,
-                             int nice) {
+void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
     /* new_rcpu = (2load)/(2load + 1) * rcpu + nice */
-    fixed_point_t numer = fpmulint(load, 2);
+    fixed_point_t numer = fpmulint(load_avg, 2);
     fixed_point_t denom = fpaddint(numer, 1);
-    int quot = fpdiv(numer, denom);
-    quot = fpmul(quot, recent_cpu);
-    return fpaddint(quot, nice);
+    fixed_point_t quot = fpdiv(numer, denom);
+    quot = fpmul(quot, t->recent_cpu);
+    t->recent_cpu = fpaddint(quot, t->nice);
+}
+
+void update_load_avg(int num_ready) {
+    fixed_point_t numer = fpmulint(load_avg, 59);
+    numer = fpaddint(numer, num_ready);
+    load_avg = fpdivint(numer, 60);
 }
 
 /*! Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
-    struct thread *t = thread_current();
-    fixed_point_t new_rcpu =
-            new_recent_cpu(load_avg, t->recent_cpu, t->nice);
-    new_rcpu = fpmulint(new_rcpu, 100);
+    fixed_point_t new_rcpu = fpmulint(thread_current()->recent_cpu, 100);
+    /* TODO: Change to nearest */
     return fptoint(new_rcpu);
 }
 

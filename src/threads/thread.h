@@ -143,14 +143,14 @@ void thread_print_stats(void);
 
 typedef void thread_func(void *aux);
 tid_t thread_create(const char *name, int priority, thread_func *, void *);
-bool thread_cmp(struct list_elem *e1, struct list_elem *e2);
+bool thread_cmp(const struct list_elem *e1, const struct list_elem *e2, void*);
 
 void thread_block(void);
 void thread_unblock(struct thread *);
 
 void thread_sleep(void);
 void thread_wake(struct thread *);
-bool sleep_cmp(struct list_elem * e1, struct list_elem * e2);
+bool sleep_cmp(const struct list_elem *e1, const struct list_elem *e2, void*UNUSED);
 
 struct thread *thread_current (void);
 tid_t thread_tid(void);
@@ -173,9 +173,9 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
-int new_priority(fixed_point_t recent_cpu, int nice);
-fixed_point_t new_recent_cpu(fixed_point_t, fixed_point_t, int);
-fixed_point_t new_load_avg(fixed_point_t ola, int num_ready);
+void update_priority(struct thread *t, void *aux);
+void update_recent_cpu(struct thread *t, void *aux);
+void update_load_avg(int num_ready);
 
 int ready_lists_size(void);
 #endif /* threads/thread.h */
