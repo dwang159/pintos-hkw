@@ -109,20 +109,242 @@ improvement over the O(n) timer interrupt of the previous design.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Replaced ready_list with:
+  static struct list ready_lists[PRI_MAX - PRI_MIN + 1];
+
+- ready_lists is a struct list array which organizes all threads with
+  the same priority into a single list.
+
+Additions to struct thread:
+  int base_priority;
+  int priority;
+  struct list locks_held;
+  struct lock *lock_requested;
+
+- base_priority: This is the priority of the thread when there are no
+  donations. It is changed using thread_set_priority.
+- priority: This now keeps track of the current priority of the thread,
+  and can be elevated above base_priority if there are donations.
+- locks_held: This is a list that contains all locks currently held by this
+  thread.
+- lock_requested: This is a pointer to the lock the thread is currently
+  blocked on. If there are no locks the thread is waiting for, then it
+  is set to NULL.
+
+Additions to struct lock:
+  struct list_elem elem;
+  int highest_wait_priority;
+
+- elem: This is a list element used so that threads can maintain a list of
+  locks owned.
+- highest_wait_priority: This keeps track of the maximum priority of the
+  threads waiting for this lock.
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+We keep track of a thread's donated priority using its "base priority" and
+"priority" attributes. We don't need to keep track of who donated the
+priority; we only need to know what the final priority is. This is because
+when the thread releases a lock, the lock already is automatically given
+to the thread waiting for it that has the highest priority.
+
+This is now a nested donation works:
+
+=== INITIAL STATE ===
+
+We have threads 1, 2, and 3 with priorities 1, 2, and 3 respectively. 2 and
+3 have locks A and B, respectively. 2 is blocked and is waiting for lock B,
+so 1 is already elevated to 2's priority level. 3 is running because it has
+the highest priority.
+
++-------------------+
+| Thread: 3         |
+| Statis: running   |
+| Priority: 3       |
+| Base priority: 3  |
+| Waiting on: None  |
+| Owns: None        |
++-------------------+
+
++-------------------+         +-----------------+
+| Thread: 2         |  owns   | Lock: A         |
+| Status: blocked   | ------> | Owned by: 2     |
+| Priority: 2       | \       | Wait list: None |
+| Base priority: 2  |  \      +-----------------+
+| Waiting on: B     |   \
+| Owns: A           |    \ Waiting for lock
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 1         |  owns   | Lock: B         |
+| Status: ready     | ------> | Owned by: 1     |
+| Priority: 2       |         | Wait list: 2    |
+| Base priority: 1  |         +-----------------+
+| Waiting on: None  |
+| Owns: B           |
++-------------------+
+
+=== Thread 3 tries to acquire lock A ===
+
+Lock A is already held by thread 2, so thread 2 is elevated to
+thread 3's priority. Thread 2 is also blocked because it is waiting
+for lock B, which is already held by thread 1, so thread 1 is also
+elevated to thread 3's priority.
+
++-------------------+
+| Thread: 3         |
+| Status: blocked   |
+| Priority: 3       | \
+| Base priority: 3  |  \
+| Waiting on: A     |   \ Waiting for lock
+| Owns: None        |    \
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 2         |  owns   | Lock: A         |
+| Status: blocked   | ------> | Owned by: 2     |
+| Priority: 3       | \       | Wait list: 3    |
+| Base priority: 2  |  \      +-----------------+
+| Waiting on: B     |   \
+| Owns: A           |    \ Waiting for lock
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 1         |  owns   | Lock: B         |
+| Status: running   | ------> | Owned by: 1     |
+| Priority: 3       |         | Wait list: 2    |
+| Base priority: 1  |         +-----------------+
+| Waiting on: None  |
+| Owns: B           |
++-------------------+
+
+=== Thread 1 releases lock B ===
+
+When thread 1 releases lock B, thread 2 acquires lock B. Thread 1 has its
+priority reset, so its priority is now 1.
+
++-------------------+
+| Thread: 3         |
+| Status: blocked   |
+| Priority: 3       | \
+| Base priority: 3  |  \
+| Waiting on: A     |   \ Waiting for lock
+| Owns: None        |    \
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 2         |  owns   | Lock: A         |
+| Status: running   | ------> | Owned by: 2     |
+| Priority: 3       | \       | Wait list: 3    |
+| Base priority: 2  |  \      +-----------------+
+| Waiting on: None  |   \
+| Owns: A, B        |    \ owns
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 1         |         | Lock: B         |
+| Status: ready     |         | Owned by: 2     |
+| Priority: 1       |         | Wait list: None |
+| Base priority: 1  |         +-----------------+
+| Waiting on: None  |
+| Owns: None        |
++-------------------+
+
+
+=== Thread 2 releases lock A ===
+
+Thread 3 acquires lock A and thread 2 is reset to its original priority.
+Now everyone is happy.
+
++-------------------+
+| Thread: 3         |
+| Status: running   |
+| Priority: 3       | \
+| Base priority: 3  |  \
+| Waiting on: None  |   \ owns
+| Owns: A           |    \
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 2         |         | Lock: A         |
+| Status: ready     |         | Owned by: 3     |
+| Priority: 2       | \       | Wait list: None |
+| Base priority: 2  |  \      +-----------------+
+| Waiting on: None  |   \
+| Owns: B           |    \ owns
++-------------------+     \
+                           \
++-------------------+       \ +-----------------+
+| Thread: 1         |         | Lock: B         |
+| Status: ready     |         | Owned by: 2     |
+| Priority: 1       |         | Wait list: None |
+| Base priority: 1  |         +-----------------+
+| Waiting on: None  |
+| Owns: None        |
++-------------------+
+
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+For a lock or semaphore (since locks use semaphores), a waiting list of
+threads is maintained in semaphore.waiters. For locks and semaphores,
+when sema_up() is called, we simply iterate through the list and find the
+thread with the highest priority using the list_max function.
+
+For a condition variable, we have condition.waiters as a list of
+semaphores associated with that condition. For each semaphore, we also
+have a waiting list (with one element) of threads that we also need to check
+to find the thread with the maximum priority.
+
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+When we call lock_acquire(), we first check if lock->holder is set (that
+is, does another thread already own the lock). If yes, then we call
+thread_donate_priority() to elevate the other thread's priority. This
+sets the receiving thread's priority to at least the current thread's
+priority (if the receiver already has a higher priority than the current
+thread, then nothing happens). In the case where the receiving thread is
+blocked and waiting for a lock, then we recurse on the thread the receiver
+is waiting on.
+
+We then add the current thread to the list of threads waiting for the lock
+and update the lock's highest wait priority if needed. When the lock is
+actually acquired, then we set the current thread as the owner of the lock,
+add the lock to the list of locks owned by the thread, and clear the
+lock_requested field of the thread.
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+
+When lock_release() is called, we clear lock.holder and remove the lock
+from the list of locks owned by the thread. We then call sema_up, which
+wakes up a thread waiting for the lock, if there is any. At this point,
+the current thread still has a priority that is at least the maximum
+of all threads waiting for the lock, so sema_up will never force this
+thread to yield.
+
+Once the next thread is woken up, we reset the lock's highest_wait_priority
+by iterating over all the threads still waiting and finding the maximum
+(or if there are no threads left, we reset to PRI_MIN - 1). Then, we reset
+the current thread's priority by calling thread_reset_priority(). This
+lowers the current thread's priority to whatever is the maximum of all
+threads waiting on the other locks still owned by this thread (we iterate
+through each lock in thread.locks_held and check highest_wait_priority). We
+compare this highest value (or PRI_MIN - 1, in the case that there are no
+other locks owned or no threads waiting on those locks) to the thread's
+base priority, and set the priority to the maximum of the two. Thus, we
+either reset to the base priority or to the maximum of threads still waiting
+on the current thread.
+
+This is why we don't need to keep track of who donates to this thread; we
+simply reset the priority to the maximum of any threads who would have
+donated to this thread.
 
 ---- SYNCHRONIZATION ----
 
@@ -130,10 +352,33 @@ improvement over the O(n) timer interrupt of the previous design.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+TODO
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+There are a number of design choices/optimizations we made that
+improve performance:
+
+- With our current design, we don't need to keep track of who the donor
+  is when a thread receives a donated priority. It's probably possible to
+  write an implementation that does that, but it would be much more messy
+  and would need to handle a lot of edge cases.
+
+- Changing ready_list into an array of lists makes finding the next thread
+  to run (the one with the highest priority) run in O(1) time, as opposed
+  to O(n) time with an unsorted list. If we wanted to keep a sorted list
+  instead, then inserting a thread into the ready queue would take O(n) time,
+  which is equally unhelpful. Using this, we have O(1) running times for
+  inserting elements in sorted order, finding the maximum element (or any
+  other element, for that matter), and removing elements from the queue.
+
+- Keeping a highest_wait_priority in our lock struct isn't strictly necessary,
+  as we could also just search the list to find the maximum, but it
+  provides O(1) performance and incurs O(1) overhead when inserting elements
+  into the list.
 
 			  ADVANCED SCHEDULER
 			  ==================
