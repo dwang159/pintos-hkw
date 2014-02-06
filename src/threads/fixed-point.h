@@ -1,5 +1,6 @@
 #ifndef FIXED_POINT_H
 #define FIXED_POINT_H
+#include <stdint.h>
 
 typedef int fixed_point_t;
 #define FRAC_BITS 14
@@ -12,11 +13,10 @@ typedef int fixed_point_t;
 #define fpaddint(x, n) (x + inttofp(n))
 #define fpsub(x, y)    (x - y)
 #define fpsubint(x, n) (x - inttofp(n))
-#define fpmul(x, y)    ((fixed_point_t) ((int64_t )x) * y / FP_SCALE)
+#define fpmul(x, y)    ((fixed_point_t) ((int64_t )x * y / FP_SCALE))
 #define fpmulint(x, n) (x * n)
-#define fpdiv(x, y)    ((fixed_point_t) ((int64_t )x) * FP_SCALE / y)
+#define fpdiv(x, y)    ((fixed_point_t) ((int64_t )x * FP_SCALE / y))
 #define fpdivint(x, n) (x / n)
 
-#define dectofp(d) (fpdivint(inttofp(d), 100))
 
 #endif /* FIXED_POINT_H */
