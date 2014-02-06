@@ -299,7 +299,9 @@ thread with the highest priority using the list_max function.
 For a condition variable, we have condition.waiters as a list of
 semaphores associated with that condition. For each semaphore, we also
 have a waiting list (with one element) of threads that we also need to check
-to find the thread with the maximum priority.
+to find the thread with the maximum priority. When we find the thread
+that has the maximum priority, we call sema_up() on the semaphore that
+contains that thread.
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
