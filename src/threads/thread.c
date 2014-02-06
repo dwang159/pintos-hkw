@@ -159,17 +159,16 @@ void thread_tick(int64_t ticks) {
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
-        printf("Timer went off\n");
         t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
-            printf("\tTimer mult of 4\n");
             thread_foreach(update_priority, NULL);
-            yield_if_higher_priority(t);
+            if (intr_get_level() == INTR_ON)
+                yield_if_higher_priority(NULL);
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
-            printf("Timer says one second\n");
-            update_load_avg(ready_lists_size());
+     //       printf("Load_avg: %d\n", thread_get_load_avg());
+            update_load_avg(ready_lists_size() + 1);
             thread_foreach(update_recent_cpu, NULL);
         }
     }
@@ -182,10 +181,12 @@ void thread_tick(int64_t ticks) {
 int ready_lists_size() {
     int num_ready = 0;
     int pri;
-    for (pri = 0; pri < PRI_NUM; pri++) {
+    for (pri = PRI_MIN; pri <= PRI_MAX; pri++) {
         num_ready += list_size(&ready_lists[pri]);
     }
+    printf("num_ready: %d\n", num_ready);
     return num_ready;
+
 }
 
 /*! Prints thread statistics. */
@@ -231,6 +232,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         update_priority(t, NULL);
     tid = t->tid = allocate_tid();
 
+    printf("Thread created: %s\n", t->name);
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
     kf->eip = NULL;
@@ -526,7 +528,8 @@ void thread_set_nice(int nice) {
     struct thread *t = thread_current();
     t->nice = nice;
     update_priority(t, NULL);
-    yield_if_higher_priority(t);
+    if (intr_get_level() == INTR_ON)
+         yield_if_higher_priority(NULL);
 }
 
 /*! Returns the current thread's nice value. */
@@ -562,6 +565,7 @@ void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
 
 void update_load_avg(int num_ready) {
     fixed_point_t numer = fpmulint(load_avg, 59);
+    num_ready = thread_current() == idle_thread ? 0 : num_ready;
     numer = fpaddint(numer, num_ready);
     load_avg = fpdivint(numer, 60);
 }
@@ -730,7 +734,6 @@ static void schedule(void) {
     struct thread *cur = running_thread();
     struct thread *next = next_thread_to_run();
     struct thread *prev = NULL;
-
     ASSERT(intr_get_level() == INTR_OFF);
     ASSERT(cur->status != THREAD_RUNNING);
     ASSERT(is_thread(next));
