@@ -162,13 +162,14 @@ void thread_tick(int64_t ticks) {
         t = thread_current();
         t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
-            thread_foreach(update_priority, NULL);
+            update_priority(thread_current(), NULL);
             if (intr_get_level() == INTR_ON)
                 yield_if_higher_priority(NULL);
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
             update_load_avg(ready_lists_size() + 1);
+            thread_foreach(update_priority, NULL);
             thread_foreach(update_recent_cpu, NULL);
         }
     }
@@ -570,7 +571,7 @@ void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
     fixed_point_t denom = fpaddint(numer, 1);
     fixed_point_t quot = fpdiv(numer, denom);
     quot = fpmul(quot, t->recent_cpu);
-    t->recent_cpu = fpaddint(quot, (t->nice - 1));
+    t->recent_cpu = fpaddint(quot, t->nice);
 }
 
 void update_load_avg(int num_ready) {
