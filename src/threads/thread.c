@@ -167,10 +167,6 @@ void thread_tick(int64_t ticks) {
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
-            yield_if_higher_priority(NULL);
-        }
-        if (timer_ticks() % TIMER_FREQ == 0) {
-            /* Update the load average on the second. */
             update_load_avg(ready_lists_size() + 1);
             thread_foreach(update_recent_cpu, NULL);
         }
@@ -288,9 +284,10 @@ void thread_sleep(void) {
     cur->status = THREAD_SLEEPING;
     // Insert into the sleeping list, maintaining a sorted order by
     // ascending wait_ticks values.
-    intr_disable();
+    enum intr_level old_level = intr_disable();
     list_insert_ordered(&sleep_list, &cur->sleepelem, &sleep_cmp, NULL);
     schedule();
+    intr_set_level(old_level);
 }
 
 /* Comparison function for inserting into the sleeping list. Compares the
@@ -440,6 +437,8 @@ void thread_set_priority(int new_priority) {
  * reset it to the base priority.
  */
 void thread_reset_priority() {
+    if (thread_mlfqs)
+        return;
     struct thread *curr = thread_current();
     int highest_priority = PRI_MIN - 1;
     struct list_elem *e;
@@ -469,6 +468,8 @@ void thread_reset_priority() {
  * does nothing.
  */
 void thread_donate_priority(struct thread *receiver, int new_priority) {
+    if (thread_mlfqs)
+        return;
     struct thread *next;
 
     ASSERT(is_thread(receiver));
