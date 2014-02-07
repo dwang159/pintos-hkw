@@ -159,6 +159,7 @@ void thread_tick(int64_t ticks) {
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
+        t = thread_current();
         t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
             thread_foreach(update_priority, NULL);
@@ -546,19 +547,17 @@ int thread_get_load_avg(void) {
 }
 
 void update_priority(struct thread *t, void *aux_ UNUSED) {
-    if (strcmp(t->name, "idle") == 0)
-        t->priority = PRI_MIN;
-    else {
-        fixed_point_t rcpu = t->recent_cpu;
-        int nice = t->nice;
-        int np = PRI_MAX - 2 * nice;
-        rcpu = fpdivint(rcpu, 4);
-        np -= fptoint(rcpu);
-        np = (np > PRI_MAX) ? PRI_MAX : np;
-        np = (np < PRI_MIN) ? PRI_MIN : np;
-        t->priority = np;
-    }
-//    printf("New priority: %d, thread_name: %s\n", t->priority, t->name);
+
+    fixed_point_t rcpu = t->recent_cpu;
+    int nice = t->nice;
+    int np = PRI_MAX - 2 * nice;
+    rcpu = fpdivint(rcpu, 4);
+    np -= fptoint(rcpu);
+    np = (np > PRI_MAX) ? PRI_MAX : np;
+    np = (np < PRI_MIN) ? PRI_MIN : np;
+    t->priority = np;
+    
+    //printf("New priority: %d, thread_name: %s, rc: %d\n", t->priority, t->name, t->recent_cpu);
     /* If the thread is on the ready queue, we need to change its location. */
     if (t->status == THREAD_READY) {
         list_remove(&t->elem);
@@ -754,6 +753,7 @@ static void schedule(void) {
     if (cur != next)
         prev = switch_threads(cur, next);
     thread_schedule_tail(prev);
+
 }
 
 /*! Returns a tid to use for a new thread. */
