@@ -146,7 +146,7 @@ void thread_tick(int64_t ticks) {
     // Iterate through sleeping list, waking up threads if needed
     struct list_elem *i;
     for (i = list_begin(&sleep_list);
-         i != list_end(&sleep_list); 
+         i != list_end(&sleep_list);
          i = list_next(i)) {
         t = list_entry( i, struct thread, sleepelem);
         if (ticks >= t->wait_ticks) {
@@ -187,9 +187,7 @@ int ready_lists_size() {
     for (pri = PRI_MIN; pri <= PRI_MAX; pri++) {
         num_ready += list_size(&ready_lists[pri]);
     }
-    printf("num_ready: %d\n", num_ready);
     return num_ready;
-
 }
 
 /*! Prints thread statistics. */
@@ -235,7 +233,6 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         update_priority(t, NULL);
     tid = t->tid = allocate_tid();
 
-    printf("Thread created: %s\n", t->name);
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
     kf->eip = NULL;
@@ -260,8 +257,8 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 /* Returns true if e1 has lower priority than e2. Used to compare
  * thread priorities.
  */
-bool thread_cmp(const struct list_elem *e1, 
-                const struct list_elem *e2, 
+bool thread_cmp(const struct list_elem *e1,
+                const struct list_elem *e2,
                 void*aux_ UNUSED) {
     return (list_entry(e1, struct thread, elem)->priority
             < list_entry(e2, struct thread, elem)->priority);
@@ -299,8 +296,8 @@ void thread_sleep(void) {
 /* Comparison function for inserting into the sleeping list. Compares the
  * wait_ticks of each element's thread
  */
-bool sleep_cmp(const struct list_elem * e1, 
-               const struct list_elem * e2, 
+bool sleep_cmp(const struct list_elem * e1,
+               const struct list_elem * e2,
                void * aux_ UNUSED) {
     return (list_entry(e1, struct thread, sleepelem)->wait_ticks
                 < list_entry(e2, struct thread, sleepelem)->wait_ticks);
@@ -420,8 +417,9 @@ void thread_foreach(thread_action_func *func, void *aux) {
 /*! Sets the current thread's base priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
     /* Calls to thread_set_priority are ignored in 4.4BSD */
-    if (thread_mlfqs) 
+    if (thread_mlfqs)
         return;
+
     struct thread *curr = thread_current();
     if (curr->base_priority < curr->priority) {
         if (new_priority >= curr->priority) {
@@ -555,6 +553,12 @@ void update_priority(struct thread *t, void *aux_ UNUSED) {
     np = (np > PRI_MAX) ? PRI_MAX : np;
     np = (np < PRI_MIN) ? PRI_MIN : np;
     t->priority = np;
+
+    /* If the thread is on the ready queue, we need to change its location. */
+    if (t->status == THREAD_READY) {
+        list_remove(&t->elem);
+        list_push_back(&ready_lists[t->priority], &t->elem);
+    }
 }
 
 void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
