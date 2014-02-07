@@ -13,12 +13,12 @@ Tim Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment: 0
+>> Specify how many late tokens you are using on this assignment: 1
 
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL: http://github.com/dkong1796/pintos_hkw.git
-   commit ...
+   commit: tagged project3 in master
 
 ---- PRELIMINARIES ----
 
@@ -48,6 +48,8 @@ wait_ticks is the number of ticks when the sleeping thread should be awoken.
 To calculate this value, whn a thread sleeps, we add the current tick counter
 to the number of ticks it should wait.
 
+recent_cpu reflects the amount of time the thread has received recently
+nice is the niceness assigned to the thread
 
 ---- ALGORITHMS ----
 
@@ -391,6 +393,13 @@ improve performance:
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+    in struct thread:
+        int nice   /* Indicator of how generous current thread is */
+        fixed_point_t recent_cpu /* How much usage of the cpu this
+                                  * thread has */
+    in fixed-point.h:
+        typedef int fixed_point_t  // fixed point arithmetic
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
@@ -398,26 +407,44 @@ improve performance:
 >> scheduling decision and the priority and recent_cpu values for each
 >> thread after each given number of timer ticks:
 
+Assuming load_avg is 0 because it is not updated
+
 timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
+ 0      0   0   0  63  61  59     A
+ 4      4   0   0  62  61  59     A
+ 8      8   0   0  61  61  59     B  
+12      8   4   0  61  60  59     A
+16     12   4   0  60  60  59     B
+20     12   8   0  60  59  59     A
+24     12   8   0  59  59  59     C
+28     16   8   4  59  59  58     B 
+32     16   8   4  59  58  58     A 
+36     16  12   8  58  58  58     C 
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+It doesn't indicate whether to increment recent_cpu or calculate
+the new priorities first, which makes a difference between having an
+extra cycle for the first running thread but otherwise pushes everything
+back. This does not match the behavior of our scheduler, because our
+recent_cpu values are almost correct but not quite in our last passing
+test. So we might fiddle with this.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+The code inside the interrupt context corresponds to 
+a) updating the running threads recent_cpu every tick
+b) updating the running thread's priority and potentially yielding
+    every 4 ticks
+c) updating every thread's priority & recent_cpu 
+    and the system's load_avg every 100 ticks
+
+a) and b) don't take very much time, and c) takes time proportional
+to the number of threads created, but still seemed to finish quickly
+enough to run smoothly.
 
 ---- RATIONALE ----
 
@@ -425,6 +452,15 @@ ticks   A   B   C   A   B   C   to run
 >> disadvantages in your design choices.  If you were to have extra
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
+    One thing that seemed inefficient in the original design was that
+    it updates the priority too often "once overy fourth clock tick,
+    for every thread". There are two ways the priority of a thread
+    could change: its recent_cpu, or its nice. Its nice value is only
+    changed during a call to set_nice which updates priority. Its
+    recent_cpu is only updated every second, which means that 99 out
+    of a 100 timer interrupts, the priorities are being updated to the
+    same values. Moving the update of all priorities to the once per
+    second removed this ineffeciency as well as letting us pass our tests.
 
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
@@ -432,6 +468,14 @@ ticks   A   B   C   A   B   C   to run
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
+We implemented it with macros over functions for two reasons: 
+    a) speed and 
+    b) There wasn't a lot of state we had to worry about changing
+       because in the macros only numbers and arithmetic was involved.
+The usefulness of macros as an abstraction layer allowed us to make a lot of
+mistakes in our fixed point implementation that gave us one location 
+to correct as well as making clear the intent of the operation in the
+update routines for the scheduler related values.
 
 			   SURVEY QUESTIONS
 			   ================
@@ -444,13 +488,18 @@ website.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
-
+The advanced scheduler was really hard and it took a lot of 
+time. Bugs were difficult to find.
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+"[Priority]  is also recalculated once every fourth clock tick, for every
+thread" in doc/pintos_9.html in section B.2 
+doesn't make any sense. There isn't anything to recalculate for every 
+thread, only for the running thread.
 
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?

@@ -80,6 +80,13 @@ static tid_t allocate_tid(void);
 static struct thread *get_highest_ready_thread(void);
 static void yield_if_higher_priority(struct thread *other);
 
+
+static void update_priority(struct thread *t, void *aux);
+static void update_recent_cpu(struct thread *t, void *aux);
+static void update_load_avg(int num_ready);
+
+static int ready_lists_size(void);
+
 /*! Initializes the threading system by transforming the code
     that's currently running into a thread.  This can't work in
     general and it is possible in this case only because loader.S
@@ -156,6 +163,7 @@ void thread_tick(int64_t ticks) {
         }
         break;
     }
+
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
