@@ -546,15 +546,19 @@ int thread_get_load_avg(void) {
 }
 
 void update_priority(struct thread *t, void *aux_ UNUSED) {
-    fixed_point_t rcpu = t->recent_cpu;
-    int nice = t->nice;
-    int np = PRI_MAX - 2 * nice;
-    rcpu = fpdivint(rcpu, 4);
-    np -= fptoint(rcpu);
-    np = (np > PRI_MAX) ? PRI_MAX : np;
-    np = (np < PRI_MIN) ? PRI_MIN : np;
-    t->priority = np;
-
+    if (strcmp(t->name, "idle") == 0)
+        t->priority = PRI_MIN;
+    else {
+        fixed_point_t rcpu = t->recent_cpu;
+        int nice = t->nice;
+        int np = PRI_MAX - 2 * nice;
+        rcpu = fpdivint(rcpu, 4);
+        np -= fptoint(rcpu);
+        np = (np > PRI_MAX) ? PRI_MAX : np;
+        np = (np < PRI_MIN) ? PRI_MIN : np;
+        t->priority = np;
+    }
+//    printf("New priority: %d, thread_name: %s\n", t->priority, t->name);
     /* If the thread is on the ready queue, we need to change its location. */
     if (t->status == THREAD_READY) {
         list_remove(&t->elem);
@@ -576,7 +580,6 @@ void update_load_avg(int num_ready) {
         num_ready = 0;
     }
     fixed_point_t numer = fpmulint(load_avg, 59);
-    num_ready = thread_current() == idle_thread ? 0 : num_ready;
     numer = fpaddint(numer, num_ready);
     load_avg = fpdivint(numer, 60);
 }

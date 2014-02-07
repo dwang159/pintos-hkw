@@ -122,7 +122,7 @@ struct thread {
 #endif
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
-    int recent_cpu; /*!< Recent cpu time used (4.4BSD) */
+    fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
 
     /*! Owned by thread.c. */
     /**@{*/
