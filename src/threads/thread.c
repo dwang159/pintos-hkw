@@ -167,15 +167,17 @@ void thread_tick(int64_t ticks) {
     // Update the priority, system load, and recent_cpu in
     // the advanced scheduler
     if (thread_mlfqs) {
+        t = thread_current();
         t->recent_cpu = fpaddint(t->recent_cpu, 1);
         if (timer_ticks() % 4 == 0) {
-            thread_foreach(update_priority, NULL);
+            update_priority(thread_current(), NULL);
             if (intr_get_level() == INTR_ON)
                 yield_if_higher_priority(NULL);
         }
         if (timer_ticks() % TIMER_FREQ == 0) {
             /* Update the load average on the second. */
             update_load_avg(ready_lists_size() + 1);
+            thread_foreach(update_priority, NULL);
             thread_foreach(update_recent_cpu, NULL);
         }
     }
@@ -554,19 +556,16 @@ int thread_get_load_avg(void) {
 }
 
 void update_priority(struct thread *t, void *aux_ UNUSED) {
-    if (strcmp(t->name, "idle") == 0)
-        t->priority = PRI_MIN;
-    else {
-        fixed_point_t rcpu = t->recent_cpu;
-        int nice = t->nice;
-        int np = PRI_MAX - 2 * nice;
-        rcpu = fpdivint(rcpu, 4);
-        np -= fptoint(rcpu);
-        np = (np > PRI_MAX) ? PRI_MAX : np;
-        np = (np < PRI_MIN) ? PRI_MIN : np;
-        t->priority = np;
-    }
-//    printf("New priority: %d, thread_name: %s\n", t->priority, t->name);
+
+    fixed_point_t rcpu = t->recent_cpu;
+    int nice = t->nice;
+    int np = PRI_MAX - 2 * nice;
+    rcpu = fpdivint(rcpu, 4);
+    np -= fptoint(rcpu);
+    np = (np > PRI_MAX) ? PRI_MAX : np;
+    np = (np < PRI_MIN) ? PRI_MIN : np;
+    t->priority = np;
+
     /* If the thread is on the ready queue, we need to change its location. */
     if (t->status == THREAD_READY) {
         list_remove(&t->elem);
@@ -575,7 +574,7 @@ void update_priority(struct thread *t, void *aux_ UNUSED) {
 }
 
 void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
-    /* new_rcpu = (2load)/(2load + 1) * rcpu + nice */
+    /* new_rcpu = (2 * load) / (2 * load + 1) * rcpu + nice */
     fixed_point_t numer = fpmulint(load_avg, 2);
     fixed_point_t denom = fpaddint(numer, 1);
     fixed_point_t quot = fpdiv(numer, denom);
@@ -762,6 +761,7 @@ static void schedule(void) {
     if (cur != next)
         prev = switch_threads(cur, next);
     thread_schedule_tail(prev);
+
 }
 
 /*! Returns a tid to use for a new thread. */
