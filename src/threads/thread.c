@@ -583,7 +583,6 @@ void update_load_avg(int num_ready) {
 /*! Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) {
     fixed_point_t new_rcpu = fpmulint(thread_current()->recent_cpu, 100);
-    /* TODO: Change to nearest */
     return fptoint(new_rcpu);
 }
 

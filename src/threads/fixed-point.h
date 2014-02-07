@@ -8,7 +8,8 @@ typedef int fixed_point_t;
 #define FP_SCALE (1 << FRAC_BITS)
 
 #define inttofp(n)   (n * FP_SCALE)
-#define fptoint(x)   (x / FP_SCALE)
+#define fptoint(x)   (x <= 0 ? x + (FP_SCALE / 2)/ FP_SCALE : \
+                                    x - (FP_SCALE / 2)/ FP_SCALE)
 #define fpadd(x, y)    (x + y)
 #define fpaddint(x, n) (x + inttofp(n))
 #define fpsub(x, y)    (x - y)
