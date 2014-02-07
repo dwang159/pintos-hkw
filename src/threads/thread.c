@@ -556,8 +556,7 @@ void update_priority(struct thread *t, void *aux_ UNUSED) {
     np = (np > PRI_MAX) ? PRI_MAX : np;
     np = (np < PRI_MIN) ? PRI_MIN : np;
     t->priority = np;
-    
-    //printf("New priority: %d, thread_name: %s, rc: %d\n", t->priority, t->name, t->recent_cpu);
+
     /* If the thread is on the ready queue, we need to change its location. */
     if (t->status == THREAD_READY) {
         list_remove(&t->elem);
@@ -566,12 +565,12 @@ void update_priority(struct thread *t, void *aux_ UNUSED) {
 }
 
 void update_recent_cpu(struct thread *t, void *aux_ UNUSED) {
-    /* new_rcpu = (2load)/(2load + 1) * rcpu + nice */
+    /* new_rcpu = (2 * load) / (2 * load + 1) * rcpu + nice */
     fixed_point_t numer = fpmulint(load_avg, 2);
     fixed_point_t denom = fpaddint(numer, 1);
     fixed_point_t quot = fpdiv(numer, denom);
     quot = fpmul(quot, t->recent_cpu);
-    t->recent_cpu = fpaddint(quot, t->nice);
+    t->recent_cpu = fpaddint(quot, (t->nice - 1));
 }
 
 void update_load_avg(int num_ready) {
