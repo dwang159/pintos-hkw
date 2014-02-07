@@ -445,7 +445,12 @@ c) updating every thread's priority & recent_cpu
 a) and b) don't take very much time, and c) takes time proportional
 to the number of threads created, but still seemed to finish quickly
 enough to run smoothly.
-TODO
+
+But still, because there is so much going on in the interrupt context
+it will probably slow things down. There isn't really much of a
+division between inside and outside: the scheduler variables 
+are mostly updated inside interrupt context, and the decision to
+yield is made there a lot of the time as well.
 
 ---- RATIONALE ----
 
