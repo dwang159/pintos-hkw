@@ -445,6 +445,7 @@ c) updating every thread's priority & recent_cpu
 a) and b) don't take very much time, and c) takes time proportional
 to the number of threads created, but still seemed to finish quickly
 enough to run smoothly.
+TODO
 
 ---- RATIONALE ----
 
@@ -462,6 +463,14 @@ enough to run smoothly.
     same values. Moving the update of all priorities to the once per
     second removed this ineffeciency as well as letting us pass our tests.
 
+
+    Another thing we could work on with more time is synchronization:
+    I don't really think we do anything beyond the protection afforded
+    in the priority donating scheduler. load_avg is only written to
+    in thread_tick and so cannot be interrupted, and the only other
+    state that is now mutated are the scheduler variables associated
+    with each thread struct. I would expect we just have rampant race
+    conditions, but aren't really doing much to fix them.
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
 >> decide to implement it the way you did?  If you created an
