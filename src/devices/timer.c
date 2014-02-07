@@ -78,14 +78,14 @@ int64_t timer_elapsed(int64_t then) {
     return timer_ticks() - then;
 }
 
-/*! Sleeps for approximately TICKS timer ticks.  Interrupts must
-    be turned on. */
-void timer_sleep(int64_t ticks) {
-    int64_t start = timer_ticks();
-
-    ASSERT(intr_get_level() == INTR_ON);
-    while (timer_elapsed(start) < ticks) 
-        thread_yield();
+/*! Sleeps for approximately WTICKS timer ticks. */
+void timer_sleep(int64_t wticks) {
+    if (wticks < 0) {
+        return;
+    }
+    // Set thread's wait_ticks to current ticks + wticks.
+    thread_current()->wait_ticks = ticks + wticks;
+    thread_sleep();
 }
 
 /*! Sleeps for approximately MS milliseconds.  Interrupts must be turned on. */
@@ -140,7 +140,7 @@ void timer_print_stats(void) {
 /*! Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
-    thread_tick();
+    thread_tick(ticks);
 }
 
 /*! Returns true if LOOPS iterations waits for more than one timer tick,
