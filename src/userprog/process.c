@@ -52,10 +52,8 @@ static void start_process(void *file_name_) {
     char * str;
     char * args[128];
     char * saveptr, *token;
-    uint32_t mems[128];
-    uint32_t *esp;
-    // Move %esp into 'esp'
-    asm ("mov %%esp, %0" : "=g" (esp));
+    void * mems[128];
+    void *stack;
     
     // Tokenize input, place into args array
     for (arglen = 0, str = file_name; ; arglen++, str = NULL)
@@ -68,42 +66,45 @@ static void start_process(void *file_name_) {
         args[arglen] = token;
     }
 
-    // Put each token onto the stack, save its location in mems
-    for (i = 0; i < arglen; i++)
-    {
-        memcpy((void *) (*esp), args[i], strlen(args[i]));
-        mems[i] = *esp;
-        esp -= strlen(args[i]) / sizeof(uint32_t);
-    }
-
-    // Word-align stack
-    esp -= (((int) esp) % 4) / sizeof(uint32_t);
-    asm("mov %0, %%esp" : "=g" (esp));
-    asm("pushl $0");
-
-    // Iterate through mems backwards, placing it onto the stack.
-    for (i = arglen - 1; i >= 0; i--)
-    {
-        memcpy((void *) (*esp), &mems[i], sizeof(uint32_t));
-        esp--;
-    }
-
-    // Move esp into %esp
-    asm("mov %0, %%esp" : "=g" (esp));
-    asm("push %0" : "=g" (arglen));
-    asm("push $0");
-
     /* Initialize interrupt frame and load executable. */
     memset(&if_, 0, sizeof(if_));
     if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
-    success = load(file_name, &if_.eip, &if_.esp);
+    success = load(args[0], &if_.eip, &if_.esp);
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
     if (!success) 
         thread_exit();
+
+    stack = if_.esp;
+    // Put each token onto the stack, save its location in mems
+    for (i = 0; i < arglen; i++)
+    {
+        stack += strlen(args[i]) + 1;
+        strlcpy((char *) stack, args[i], strlen(args[i]) + 1);
+        mems[i] = stack;
+    }
+
+    // Word-align stack
+    stack -= ((int) stack) % 4 + 4;
+    memset(stack, 0, 4);
+
+    // Iterate through mems backwards, placing it onto the stack.
+    for (i = arglen - 1; i >= 0; i--)
+    {
+        stack -= sizeof(void *);
+        memcpy(stack, &mems[i], sizeof(void *));
+    }
+
+    // Move esp into %esp
+    stack -= sizeof(int);
+    memset(stack, arglen, sizeof(int));
+    stack -= 4;
+    memset(stack, 0, 4);
+    if_.esp = stack;
+
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
@@ -124,6 +125,7 @@ static void start_process(void *file_name_) {
     This function will be implemented in problem 2-2.  For now, it does
     nothing. */
 int process_wait(tid_t child_tid UNUSED) {
+    while(true){};
     return -1;
 }
 
