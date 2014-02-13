@@ -48,6 +48,50 @@ static void start_process(void *file_name_) {
     char *file_name = file_name_;
     struct intr_frame if_;
     bool success;
+    int arglen, i;
+    char * str;
+    char * args[128];
+    char * saveptr, *token;
+    uint32_t mems[128];
+    uint32_t *esp;
+    // Move %esp into 'esp'
+    asm ("mov %%esp, %0" : "=g" (esp));
+    
+    // Tokenize input, place into args array
+    for (arglen = 0, str = file_name; ; arglen++, str = NULL)
+    {
+        token = strtok_r(str, " ", &saveptr);
+        if (token == NULL)
+        {
+            break;
+        }
+        args[arglen] = token;
+    }
+
+    // Put each token onto the stack, save its location in mems
+    for (i = 0; i < arglen; i++)
+    {
+        memcpy((void *) (*esp), args[i], strlen(args[i]));
+        mems[i] = *esp;
+        esp -= strlen(args[i]) / sizeof(uint32_t);
+    }
+
+    // Word-align stack
+    esp -= (((int) esp) % 4) / sizeof(uint32_t);
+    asm("mov %0, %%esp" : "=g" (esp));
+    asm("pushl $0");
+
+    // Iterate through mems backwards, placing it onto the stack.
+    for (i = arglen - 1; i >= 0; i--)
+    {
+        memcpy((void *) (*esp), &mems[i], sizeof(uint32_t));
+        esp--;
+    }
+
+    // Move esp into %esp
+    asm("mov %0, %%esp" : "=g" (esp));
+    asm("push %0" : "=g" (arglen));
+    asm("push $0");
 
     /* Initialize interrupt frame and load executable. */
     memset(&if_, 0, sizeof(if_));
