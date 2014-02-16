@@ -18,7 +18,8 @@ Daniel Wang <dwang@caltech.edu>
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL: http://github.com/dkong1796/pintos_hkw.git
-   commit: tagged project3 in master
+   commit: tagged project3 in threads
+           8f9804e16a506c45fdefa1c441969b95b907904d
 
 ---- PRELIMINARIES ----
 
