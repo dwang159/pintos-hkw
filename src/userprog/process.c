@@ -123,19 +123,6 @@ static void start_process(void *file_name_) {
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
 
-    /* TODO: TESTING */
-    stack += sizeof(void *);
-    int argc = *(int *)stack;
-    stack += sizeof(int);
-    char **argv = *(char ***)stack;
-    printf("argc: %d\n", argc);
-    for (i = 0; i < argc; i++) {
-        printf("arg: %s\n", argv[i]);
-    }
-    if (argv[argc] == 0) {
-        printf("argv terminated with null value\n");
-    }
-
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
        threads/intr-stubs.S).  Because intr_exit takes all of its
