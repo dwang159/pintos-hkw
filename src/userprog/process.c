@@ -54,6 +54,7 @@ static void start_process(void *file_name_) {
     char *saveptr, *token;
     void *mems[128];
     void *stack;
+    void *tmp;
 
     // Tokenize input, place into args array
     for (arglen = 0, str = file_name; ; arglen++, str = NULL)
@@ -88,6 +89,9 @@ static void start_process(void *file_name_) {
         mems[i] = stack;
     }
 
+    // The last argument of argv should be a null value.
+    mems[arglen] = 0;
+
     // We don't need the file_name page any more.
     palloc_free_page(file_name);
 
@@ -95,12 +99,18 @@ static void start_process(void *file_name_) {
     stack -= ((unsigned int) stack) % sizeof(void *) + sizeof(void *);
     memset(stack, 0, sizeof(void *));
 
-    // Push each element of argv onto the stack.
-    for (i = arglen - 1; i >= 0; i--)
+    // Push each element of argv onto the stack. We start with
+    // i = arglen because we push a null value as argv[argc].
+    for (i = arglen; i >= 0; i--)
     {
         stack -= sizeof(void *);
         memcpy(stack, &mems[i], sizeof(void *));
     }
+
+    // Stack now points to argv[0]. We push this location as argv.
+    tmp = stack;
+    stack -= sizeof(char **);
+    memcpy(stack, &tmp, sizeof(char **));
 
     // Push argc.
     stack -= sizeof(int);
@@ -112,6 +122,19 @@ static void start_process(void *file_name_) {
 
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
+
+    /* TODO: TESTING */
+    stack += sizeof(void *);
+    int argc = *(int *)stack;
+    stack += sizeof(int);
+    char **argv = *(char ***)stack;
+    printf("argc: %d\n", argc);
+    for (i = 0; i < argc; i++) {
+        printf("arg: %s\n", argv[i]);
+    }
+    if (argv[argc] == 0) {
+        printf("argv terminated with null value\n");
+    }
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
