@@ -60,58 +60,55 @@ static void start_process(void *file_name_) {
     {
         token = strtok_r(str, " ", &saveptr);
         if (token == NULL)
+        {
             break;
+        }
         args[arglen] = token;
     }
+
+    for (i = 0; i < arglen; i++)
+        printf("token: %s\n", args[i]);
 
     /* Initialize interrupt frame and load executable. */
     memset(&if_, 0, sizeof(if_));
     if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
-
     success = load(args[0], &if_.eip, &if_.esp);
 
     /* If load failed, quit. */
-    if (!success) {
-        palloc_free_page(file_name);
+    palloc_free_page(file_name);
+    if (!success)
         thread_exit();
-    }
 
     stack = if_.esp;
 
-    // Put each token onto the stack, saving its location in mems.
+    // Put each token onto the stack, save its location in mems
     for (i = 0; i < arglen; i++)
     {
-        stack -= strlen(args[i]) + 1;
+        stack += strlen(args[i]) + 1;
         strlcpy((char *) stack, args[i], strlen(args[i]) + 1);
         mems[i] = stack;
     }
 
-    // We don't need the file_name page any more.
-    palloc_free_page(file_name);
-
     // Word-align stack
-    stack -= ((unsigned int) stack) % sizeof(void *) + sizeof(void *);
-    memset(stack, 0, sizeof(void *));
+    stack -= ((int) stack) % 4 + 4;
+    memset(stack, 0, 4);
 
-    // Push each element of argv onto the stack.
+    // Iterate through mems backwards, placing it onto the stack.
     for (i = arglen - 1; i >= 0; i--)
     {
         stack -= sizeof(void *);
         memcpy(stack, &mems[i], sizeof(void *));
     }
 
-    // Push argc.
+    // Move esp into %esp
     stack -= sizeof(int);
-    memcpy(stack, &arglen, sizeof(int));
-
-    // Push dummy value for ret address.
-    stack -= sizeof(void *);
-    memset(stack, 0, sizeof(void *));
-
-    // Set the interrupt frame's stack pointer to the new location.
+    memset(stack, arglen, sizeof(int));
+    stack -= 4;
+    memset(stack, 0, 4);
     if_.esp = stack;
+
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
