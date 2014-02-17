@@ -234,9 +234,12 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     /* Initialize thread. */
     init_thread(t, name, priority);
     t->nice = thread_get_nice(); /* Nice of child is same as parent */
-    t->recent_cpu = thread_current()->recent_cpu;
-    if (thread_mlfqs) /* 4.4 BSD Scheduler */
+
+    if (thread_mlfqs) { /* 4.4 BSD Scheduler */
+        t->recent_cpu = thread_current()->recent_cpu;
         update_priority(t, NULL);
+    }
+
     tid = t->tid = allocate_tid();
 
     /* Stack frame for kernel_thread(). */
