@@ -135,46 +135,6 @@ static void start_process(void *file_name_) {
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
 
-    // TODO
-    int argc;
-    char **argv;
-    stack += sizeof(void *);
-    argc = *(int *)stack;
-    stack += sizeof(int);
-    argv = *(char ***)stack;
-    printf("argc: %d\n", argc);
-    for (i = 0; i < argc; i++)
-        printf("argv[%d]: %s\n", i, argv[i]);
-    if (argv[argc] == 0)
-        printf("argv is null terminated\n");
-
-    // Test vectors.
-    struct vector vec;
-    struct vector *v = &vec;
-
-    vector_init(v);
-    for (i = 0; i < 10; i++)
-        vector_append(v, (void *) (i * 69));
-    printf("added elements to v\n");
-    printf("size of v: %d\n", v->size);
-    printf("maxsize of v: %d\n", v->max_size);
-    for (i = 0; i < v->size; i++)
-        printf("v[%d] = %d\n", i, v->data[i]);
-    printf("removing an element at index 2\n");
-    vector_remove(v, 2);
-    for (i = 0; i < v->size; i++)
-        printf("v[%d] = %d\n", i, v->data[i]);
-    printf("size of v: %d\n", v->size);
-    printf("maxsize of v: %d\n", v->max_size);
-    printf("inserting an element at index 4\n");
-    vector_insert(v, 4, 99999);
-    for (i = 0; i < v->size; i++)
-        printf("v[%d] = %d\n", i, v->data[i]);
-    printf("size of v: %d\n", v->size);
-    printf("maxsize of v: %d\n", v->max_size);
-    printf("is v empty? %s\n", vector_empty(v) ? "yes" : "no");
-
-
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
        threads/intr-stubs.S).  Because intr_exit takes all of its
