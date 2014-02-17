@@ -386,10 +386,10 @@ void thread_exit(void) {
 
     /* Release all held locks */
     struct list_elem *e;
-    struct list lock_list = thread_current()->locks_held;
+    struct list *lock_list = &thread_current()->locks_held;
 
-    for (e = list_begin (&lock_list); e != list_end (&lock_list);
-                                      e = list_next (e)) {
+    for (e = list_begin(lock_list); e != list_end(lock_list);
+            e = list_next (e)) {
         lock_release(list_entry(e, struct lock, elem));
     }
 
