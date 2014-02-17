@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -48,13 +49,19 @@ static void start_process(void *file_name_) {
     char *file_name = file_name_;
     struct intr_frame if_;
     bool success;
-    int arglen, i;
+    int arglen, i, maxlen;
     char *str;
-    char *args[128];
+    char **args;
     char *saveptr, *token;
-    void *mems[128];
+    void **mems;
     void *stack;
     void *tmp;
+
+    // Set up the args and mems arrays.
+    maxlen = strlen(file_name);
+    args = (char **)malloc(maxlen * sizeof(char *));
+    mems = (void **)malloc(maxlen * sizeof(void *));
+    ASSERT(args && mems);
 
     // Tokenize input, place into args array
     for (arglen = 0, str = file_name; ; arglen++, str = NULL)
@@ -92,8 +99,9 @@ static void start_process(void *file_name_) {
     // The last argument of argv should be a null value.
     mems[arglen] = 0;
 
-    // We don't need the file_name page any more.
+    // We don't need the file_name page or args any more.
     palloc_free_page(file_name);
+    free(args);
 
     // Word-align stack
     stack -= ((unsigned int) stack) % sizeof(void *) + sizeof(void *);
@@ -106,6 +114,9 @@ static void start_process(void *file_name_) {
         stack -= sizeof(void *);
         memcpy(stack, &mems[i], sizeof(void *));
     }
+
+    // We don't need mems any more.
+    free(mems);
 
     // Stack now points to argv[0]. We push this location as argv.
     tmp = stack;
@@ -122,6 +133,20 @@ static void start_process(void *file_name_) {
 
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
+
+    // TODO
+    int argc;
+    char **argv;
+    stack += sizeof(void *);
+    argc = *(int *)stack;
+    stack += sizeof(int);
+    argv = *(char ***)stack;
+    printf("argc: %d\n", argc);
+    for (i = 0; i < argc; i++)
+        printf("argv[%d]: %s\n", i, argv[i]);
+    if (argv[argc] == 0)
+        printf("argv is null terminated\n");
+
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
