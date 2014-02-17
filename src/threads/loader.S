@@ -72,12 +72,12 @@ DAP:
 
     .long 0x0000      # LBA of sector (last 8 bytes)
     .long 0x0000      # is just 0
-  
+
 check_mbr:
     # Read the MBR sector from the drive
     mov $0x42, %ah  # 0x42 is the argument for Extended Read Sectors
     int $0x13       # Execute a Low Level Disk Service (extended read)
-   
+
     # Check status of disk read. The carry flag (CF) is set if
     # there was an error.
     jnc read_successful
@@ -118,13 +118,13 @@ next_partition:
     add $0x10, %si    # Move to next ptable entry
     cmp $0x1ee, %si # Compare to end of ptable
     jle p_table_loop   # Keep going through them
-    # jg no_boot_part 
+    # jg no_boot_part
 
 no_boot_part:
-    # We have iterated through the partition table with no luck, 
+    # We have iterated through the partition table with no luck,
     # so quitting.
     call puts
-    .string "1" # Print error code 1 for bootable drive with no 
+    .string "1" # Print error code 1 for bootable drive with no
                 # boot partition
     int $0x18
 
@@ -132,18 +132,15 @@ type_check:
     # Check to see if the drive has Pintos type (0x20). If so, start
     # copying. Otherwise, move to next drive.
     movb $0x20, %al        # AL = Pintos type
-    cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition 
+    cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition
                            # entry to the type
     jne read_p_table  # If the type is incorrect, keep looking for a part.
     # je copy kernel    # Else start moving the kernel from this partition
 
 copy_kernel:
-    # Print cp when a paritition has been chosen. (Chose partition)
-    call puts 
-    .string "cp\r"
     # %esi points to the start of the partition entry
     # %dl has the hard disk number
-  
+
     movl %es:0x08(%si), %ebx # Save the LBA from the partition entry
     movl %es:0x0c(%si), %ecx  # Save the number of sectors to be loaded
     mov $DAP, %si        # *ESI = DAP
@@ -164,7 +161,7 @@ copy_kernel:
     movl $0x400, %ecx
 
 copy_loop:
-    # Invariants: 
+    # Invariants:
     #   ECX is the loop counter
     #   EDI is the address to write to
     #   EBX holds the LBA to read the first sector from
@@ -177,9 +174,9 @@ copy_loop:
                           # should increment by 0x8000
 
     movl %ebx, 0x8(%si)   # Change start of sector reads
-    movl $0x0, 0xc(%si)   # Keep high bytes 0 still  
+    movl $0x0, 0xc(%si)   # Keep high bytes 0 still
     add $0x1, %ebx        # 1 sector read in each iteration,
-                          # so increment the sector to start 
+                          # so increment the sector to start
                           # reading from.
 
     # Read the next sector from the drive and write
@@ -187,15 +184,8 @@ copy_loop:
     mov $0x42, %ah
     int $0x13
     jc read_unsuccessful   # IF carry flag, wasn't able to copy
-    # Print a '.' after each sector is read
-    call puts
-    .string "."
     dec %ecx       # One more batch of sectors copied
     jnz copy_loop # End the loop if all 32 batches have been copied
-    
-    # Print ld when data has been loaded.
-    call puts
-    .string "\rld\r"
 
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
