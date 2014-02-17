@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include <vector.h>
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -134,19 +135,8 @@ static void start_process(void *file_name_) {
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
 
-    // TODO
-    int argc;
-    char **argv;
-    stack += sizeof(void *);
-    argc = *(int *)stack;
-    stack += sizeof(int);
-    argv = *(char ***)stack;
-    printf("argc: %d\n", argc);
-    for (i = 0; i < argc; i++)
-        printf("argv[%d]: %s\n", i, argv[i]);
-    if (argv[argc] == 0)
-        printf("argv is null terminated\n");
-
+    // Set up the file descriptor table.
+    vector_init(&thread_current()->files);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
@@ -193,6 +183,7 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
+    vector_destruct(&cur->files);
 }
 
 /*! Sets up the CPU for running user code in the current thread.
