@@ -11,7 +11,7 @@ static void syscall_handler(struct intr_frame *);
 /* System calls. */
 void sys_halt(const void **args);
 void sys_exit(const void **args);
-tid_t sys_exec(const void **args);
+pid_t sys_exec(const void **args);
 int sys_wait(const void **args);
 bool sys_create(const void **args);
 bool sys_remove(const void **args);
@@ -105,7 +105,7 @@ static void syscall_handler(struct intr_frame *f) {
 bool mem_valid(const void *addr)
 {
     return (is_user_vaddr(addr) &&
-                    lookup_page(thread_current()->pagedire, addr, false) != NULL);
+            lookup_page(thread_current()->pagedir, addr, false) != NULL);
 }
 
 /* Terminates Pintos */
