@@ -135,6 +135,9 @@ static void start_process(void *file_name_) {
     // Set the interrupt frame's stack pointer to the new location.
     if_.esp = stack;
 
+    // Set up the file descriptor table.
+    vector_init(&thread_current()->files);
+
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
        threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -180,6 +183,7 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
+    vector_destruct(&cur->files);
 }
 
 /*! Sets up the CPU for running user code in the current thread.
