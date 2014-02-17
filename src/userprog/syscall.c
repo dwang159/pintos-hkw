@@ -107,3 +107,103 @@ bool mem_valid(const void *addr)
     return (is_user_vaddr(addr) &&
                     lookup_page(thread_current()->pagedire, addr, false) != NULL);
 }
+
+/* Terminates Pintos */
+void sys_halt(const void **args) {
+    shutdown_power_off();
+}
+
+/* Terminates current user program and returns status to kernel */
+void sys_exit(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Runs the executable with the given name, returns the new process's pid */
+pid_t sys_exec(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Waits for a child process and retrieves its exit status */
+int sys_wait(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Creates a new file of given. Returns true if successful, false otherwise */
+bool sys_create(const void **args) {
+    if (!mem_valid((*args) + sizeof(file *))) {
+        thread_exit();
+        return;
+    }
+
+/* Deletes the specified file */
+bool sys_remove(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Opens the specified file, returns a file descriptor*/
+int sys_open(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Returns size in bytes of specified file */
+int sys_filesize(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Read bytes from buffer to open file. Returns number of bytes read */
+int sys_read(const void **args) {
+    if (!mem_valid((*args) + sizeof(void *) + sizeof(unsigned))) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Writes bytes from buffer to file. Returns number of bytes written */
+int sys_write(const void **args) {
+    if (!mem_valid((*args) + sizeof(void *) + sizeof(unsigned))) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Changes the next byte to be read or written in open file */
+void sys_seek(const void **args) {
+    if (!mem_valid((*args) + sizeof(unsigned))) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Returns the postition of the next byte to be read or written in open file */
+unsigned int sys_tell(const void **args) {
+if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
+
+/* Closes given file descriptor */
+void sys_close(const void **args) {
+    if (!mem_valid(*args)) {
+        thread_exit();
+        return;
+    }
+}
