@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include <vector.h>
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -146,6 +147,32 @@ static void start_process(void *file_name_) {
         printf("argv[%d]: %s\n", i, argv[i]);
     if (argv[argc] == 0)
         printf("argv is null terminated\n");
+
+    // Test vectors.
+    struct vector vec;
+    struct vector *v = &vec;
+
+    vector_init(v);
+    for (i = 0; i < 10; i++)
+        vector_append(v, (void *) (i * 69));
+    printf("added elements to v\n");
+    printf("size of v: %d\n", v->size);
+    printf("maxsize of v: %d\n", v->max_size);
+    for (i = 0; i < v->size; i++)
+        printf("v[%d] = %d\n", i, v->data[i]);
+    printf("removing an element at index 2\n");
+    vector_remove(v, 2);
+    for (i = 0; i < v->size; i++)
+        printf("v[%d] = %d\n", i, v->data[i]);
+    printf("size of v: %d\n", v->size);
+    printf("maxsize of v: %d\n", v->max_size);
+    printf("inserting an element at index 4\n");
+    vector_insert(v, 4, 99999);
+    for (i = 0; i < v->size; i++)
+        printf("v[%d] = %d\n", i, v->data[i]);
+    printf("size of v: %d\n", v->size);
+    printf("maxsize of v: %d\n", v->max_size);
+    printf("is v empty? %s\n", vector_empty(v) ? "yes" : "no");
 
 
     /* Start the user process by simulating a return from an
