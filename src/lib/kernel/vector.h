@@ -20,6 +20,8 @@
  *   c = (char *) v.data[i];
  *   // Do something with c
  * }
+ *
+ * Vectors are good for O(1) access and amortized O(1) appends.
  */
 
 struct vector

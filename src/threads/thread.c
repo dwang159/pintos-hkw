@@ -389,7 +389,7 @@ void thread_exit(void) {
     struct list *lock_list = &thread_current()->locks_held;
 
     for (e = list_begin(lock_list); e != list_end(lock_list);
-            e = list_next (e)) {
+            e = list_next(e)) {
         lock_release(list_entry(e, struct lock, elem));
     }
 
