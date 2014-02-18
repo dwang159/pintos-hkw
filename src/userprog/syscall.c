@@ -6,12 +6,18 @@
 #include "threads/vaddr.h"
 #include "pagedir.h"
 
-/* Macros to help with arg checking. */
+/* Macros to help with arg checking. Checks the pointer to the args
+ * and the byte just before the end of the last arg.
+ */
 #define check_args_1(ptr, type) \
-    (mem_valid(ptr, sizeof(type)))
+    (mem_valid((void *) ptr) && mem_valid((void *) ptr + sizeof(type) - 1))
 #define check_args_2(ptr, type1, type2) \
-    (mem_valid(ptr, sizeof(type1)) && \
-     mem_valid(ptr + sizeof(type1), sizeof(type2)))
+    (mem_valid((void *) ptr) && \
+     mem_valid((void *) ptr + sizeof(type1) + sizeof(type2) - 1))
+#define check_args_3(ptr, type1, type2, type3) \
+    (mem_valid((void *) ptr) && \
+     mem_valid((void *) ptr + sizeof(type1) + sizeof(type2) + sizeof(type3) \
+         - 1))
 
 static void syscall_handler(struct intr_frame *);
 
@@ -31,7 +37,7 @@ unsigned int sys_tell(int fd);
 void sys_close(int fd);
 
 /* Checks if memory address is valid. */
-bool mem_valid(const void *addr, int size);
+bool mem_valid(const void *addr);
 
 void syscall_init(void) {
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -40,9 +46,10 @@ void syscall_init(void) {
 static void syscall_handler(struct intr_frame *f) {
     void *esp = f->esp;
     void *args;
+    bool args_valid = true;
 
     /* Check pointer validity */
-    if (!mem_valid(esp, sizeof(int))) {
+    if (!check_args_1(esp, int)) {
         thread_exit();
         return;
     }
@@ -56,22 +63,53 @@ static void syscall_handler(struct intr_frame *f) {
     switch (syscall_nr)
     {
     case SYS_HALT:
+        sys_halt();
         break;
     case SYS_EXIT:
+        if (check_args_1(args, int))
+            sys_exit(*((int *) args));
+        else
+            args_valid = false;
         break;
     case SYS_EXEC:
+        if (check_args_1(args, char *))
+            sys_exec(*((char **) args));
+        else
+            args_valid = false;
         break;
     case SYS_WAIT:
+        if (check_args_1(args, pid_t))
+            sys_wait(*((pid_t *) args));
+        else
+            args_valid = false;
         break;
     case SYS_CREATE:
+        if (check_args_2(args, char *, unsigned))
+            sys_create(*((char **) args),
+                    *((unsigned *)(args + sizeof(char *))));
+        else
+            args_valid = false;
         break;
     case SYS_REMOVE:
+        if (check_args_1(args, char *))
+            sys_remove(*((char **) args));
+        else
+            args_valid = false;
         break;
     case SYS_OPEN:
+        if (check_args_1(args, char *))
+            sys_remove(*((char **) args));
+        else
+            args_valid = false;
         break;
     case SYS_FILESIZE:
+        if (check_args_1(args, int))
+            sys_remove(*((int *) args));
+        else
+            args_valid = false;
         break;
     case SYS_READ:
+        if (check_args_2)
         break;
     case SYS_WRITE:
         break;
@@ -92,11 +130,8 @@ static void syscall_handler(struct intr_frame *f) {
  * wanted to check an integer at addr, we check addr and addr + 3 to
  * make sure both are valid.
  */
-bool mem_valid(const void *addr, int size)
+bool mem_valid(const void *addr)
 {
-    return (is_user_vaddr(addr) &&
-            pagedir_get_page(thread_current()->pagedir, addr) != NULL &&
-            is_user_vaddr(addr + size - 1) &&
-            pagedir_get_page(thread_current()->pagedir,
-                addr + size - 1) != NULL);
+    return (addr != NULL && is_user_vaddr(addr) &&
+            pagedir_get_page(thread_current()->pagedir, addr) != NULL);
 }
