@@ -8,6 +8,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/input.h"
+#include "devices/shutdown.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -58,7 +59,7 @@ static void syscall_handler(struct intr_frame *f) {
     }
 
     int syscall_nr = *((int *) esp);
-    printf("syscall: %d\n", syscall_nr);
+    int off1, off2;
     args = esp + sizeof(int);
 
     // Check that all args are within user memory and call the
@@ -79,65 +80,74 @@ static void syscall_handler(struct intr_frame *f) {
         break;
     case SYS_EXEC:
         if (check_args_1(args, char *))
-            sys_exec(*((char **) args));
+            f->eax = (uint32_t) sys_exec(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_WAIT:
         if (check_args_1(args, pid_t))
-            sys_wait(*((pid_t *) args));
+            /* Put return value in %eax */
+            f->eax = (uint32_t) sys_wait(*((pid_t *) args));
         else
             args_valid = false;
         break;
     case SYS_CREATE:
-        if (check_args_2(args, char *, unsigned int))
-            sys_create(*((char **) args),
-                    *((unsigned int *)(args + sizeof(char *))));
-        else
+        if (check_args_2(args, char *, unsigned int)) {
+            off1 = sizeof(char*);
+            f->eax = (uint32_t) sys_create(*((char **) args),
+                                *((unsigned int *)(args + off1)));
+        } else
             args_valid = false;
         break;
     case SYS_REMOVE:
         if (check_args_1(args, char *))
-            sys_remove(*((char **) args));
+            f->eax = (uint32_t) sys_remove(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_OPEN:
         if (check_args_1(args, char *))
-            sys_remove(*((char **) args));
+            f->eax = (uint32_t) sys_open(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_FILESIZE:
         if (check_args_1(args, int))
-            sys_remove(*((int *) args));
+            f->eax = (uint32_t) sys_filesize(*((int *) args));
         else
             args_valid = false;
         break;
     case SYS_READ:
-        if (check_args_3(args, int, void *, unsigned int))
-            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
-                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
-        else
+        if (check_args_3(args, int, void *, unsigned int)) {
+            off1 = sizeof(int);
+            off2 = off1 + sizeof(void *);
+            f->eax = (uint32_t) sys_read(*((int *) args), 
+                              *((void **) (args + off1)),
+                              *((unsigned int *) (args + off2)));
+        } else
             args_valid = false;
         break;
     case SYS_WRITE:
-        if (check_args_3(args, int, void *, unsigned int))
-            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
-                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
-        else
+        if (check_args_3(args, int, void *, unsigned int)) {
+            off1 = sizeof(int);
+            off2 = off1 + sizeof(void *);
+            f->eax = (uint32_t) sys_write(*((int *) args), 
+                               *((void **) (args + off1)),
+                               *((unsigned int *) (args + off2)));
+        } else
             args_valid = false;
         break;
     case SYS_SEEK:
-        if (check_args_2(args, int, unsigned int))
+        if (check_args_2(args, int, unsigned int)) {
+            off1 = sizeof(int);
             sys_seek(*((int *) args),
-                    *((unsigned int **) (args + sizeof(int))));
-        else
+                     *((unsigned int **) (args + off1)));
+        } else
             args_valid = false;
         break;
     case SYS_TELL:
         if (check_args_1(args, int))
-            sys_tell(*((int *) args));
+            f->eax = (uint32_t) sys_tell(*((int *) args));
         else
             args_valid = false;
         break;
@@ -152,6 +162,7 @@ static void syscall_handler(struct intr_frame *f) {
         break;
     }
 
+    /* If something went wrong, then we exit with status code -1. */
     if (!args_valid)
         sys_exit(-1);
     return;
@@ -177,8 +188,18 @@ void sys_halt()
 /* Terminates the current process, returning status. */
 void sys_exit(int status)
 {
-    // TODO
-    return;
+    // Set the exit status.
+    struct thread *t = thread_current();
+
+    // Print exit message.
+    printf("%s: exit(%d)\n", t->name, status);
+
+    struct exit_state *es = thread_exit_status.data[t->tid];
+    es->exit_status = status;
+    // Wake up parent if it was waiting on child. This also indicates
+    // that the thread has exited.
+    sema_up(&es->waiting);
+    thread_exit();
 }
 
 /* Runs the executable given by cmd_line. Returns the pid of
@@ -186,7 +207,6 @@ void sys_exit(int status)
  */
 pid_t sys_exec(const char *cmd_line)
 {
-    // TODO
     return 1;
 }
 
@@ -195,8 +215,9 @@ pid_t sys_exec(const char *cmd_line)
  */
 int sys_wait(pid_t pid)
 {
-    // TODO
-    return 1;
+    // We map pids directly into tids, so we know the tid of the
+    // thread we want.
+    return process_wait((tid_t) pid);
 }
 
 /* Creates a new file with initial_size bytes. Returns true on

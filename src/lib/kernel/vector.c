@@ -70,7 +70,7 @@ void vector_insert(struct vector *v, unsigned int pos, void *value)
 
     // If the vector is full, we need to resize it.
     if (v->size == v->max_size)
-        vector_resize(v, v->size * 2);
+        vector_resize(v, v->max_size * 2);
 
     for (i = v->size - 1; i >= pos; i--)
         v->data[i + 1] = v->data[i];
@@ -86,7 +86,7 @@ void vector_append(struct vector *v, void *value)
 {
     ASSERT(v);
     if (v->size == v->max_size)
-        vector_resize(v, v->size * 2);
+        vector_resize(v, v->max_size * 2);
     v->data[v->size] = value;
     v->size++;
 }
@@ -113,6 +113,20 @@ void vector_destruct(struct vector *v)
     ASSERT(v);
     free(v->data);
     v->size = v->max_size = 0;
+}
+
+/*
+ * Clears vector and creates a new one with initial size (not max_size)
+ * of num, filled with zeros.
+ */
+void vector_zeros(struct vector *v, unsigned int num)
+{
+    unsigned int i;
+
+    ASSERT(v);
+    v->size = 0;
+    for (i = 0; i < num; i++)
+        vector_append(v, 0);
 }
 
 /*

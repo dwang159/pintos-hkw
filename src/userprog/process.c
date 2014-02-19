@@ -57,6 +57,7 @@ static void start_process(void *file_name_) {
     void **mems;
     void *stack;
     void *tmp;
+    struct thread *curr = thread_current();
 
     // Set up the args and mems arrays.
     maxlen = strlen(file_name);
@@ -72,6 +73,9 @@ static void start_process(void *file_name_) {
             break;
         args[arglen] = token;
     }
+
+    // Correct the process's name.
+    strlcpy(curr->name, args[0], THREAD_NAME_LEN);
 
     /* Initialize interrupt frame and load executable. */
     memset(&if_, 0, sizeof(if_));
@@ -136,7 +140,7 @@ static void start_process(void *file_name_) {
     if_.esp = stack;
 
     // Set up the file descriptor table.
-    vector_init(&thread_current()->files);
+    vector_init(&curr->files);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
@@ -156,11 +160,36 @@ static void start_process(void *file_name_) {
 
     This function will be implemented in problem 2-2.  For now, it does
     nothing. */
-int process_wait(tid_t child_tid UNUSED) {
-    while (1) {
-        thread_yield();
-    }
-    return -1;
+int process_wait(tid_t child_tid) {
+    struct exit_state *es;
+    int status;
+
+    // Check if tid is valid.
+    if (child_tid >= thread_exit_status.size)
+        return -1;
+
+    es = thread_exit_status.data[child_tid];
+
+    // If es is null, then the parent has already waited for this child.
+    if (!es)
+        return -1;
+
+    // Check that the child belongs to the parent.
+    if (es->parent != thread_tid())
+        return -1;
+
+    // Wait for the semaphore to be raised (which indicates that the
+    // child has terminated).
+    sema_down(&es->waiting);
+
+    // Get the exit status.
+    status = es->exit_status;
+
+    // Clean up the memory.
+    free(es);
+    thread_exit_status.data[child_tid] = NULL;
+
+    return status;
 }
 
 /*! Free the current process's resources. */
