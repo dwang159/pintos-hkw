@@ -59,7 +59,10 @@ static void syscall_handler(struct intr_frame *f) {
     args = esp + sizeof(int);
 
     // Check that all args are within user memory and call the
-    // appropriate handler.
+    // appropriate handler. When we call the handler, we dereference
+    // args using the *((int *) args) notation instead of (int) args[0]
+    // because even though it just happens that int, void *, etc are all
+    // the same size, this works better for the general case.
     switch (syscall_nr)
     {
     case SYS_HALT:
@@ -84,9 +87,9 @@ static void syscall_handler(struct intr_frame *f) {
             args_valid = false;
         break;
     case SYS_CREATE:
-        if (check_args_2(args, char *, unsigned))
+        if (check_args_2(args, char *, unsigned int))
             sys_create(*((char **) args),
-                    *((unsigned *)(args + sizeof(char *))));
+                    *((unsigned int *)(args + sizeof(char *))));
         else
             args_valid = false;
         break;
@@ -109,19 +112,45 @@ static void syscall_handler(struct intr_frame *f) {
             args_valid = false;
         break;
     case SYS_READ:
-        if (check_args_2)
+        if (check_args_3(args, int, void *, unsigned int))
+            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
+                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
+        else
+            args_valid = false;
         break;
     case SYS_WRITE:
+        if (check_args_3(args, int, void *, unsigned int))
+            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
+                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
+        else
+            args_valid = false;
         break;
     case SYS_SEEK:
+        if (check_args_2(args, int, unsigned int))
+            sys_seek(*((int *) args),
+                    *((unsigned int **) (args + sizeof(int))));
+        else
+            args_valid = false;
         break;
     case SYS_TELL:
+        if (check_args_1(args, int))
+            sys_tell(*((int *) args));
+        else
+            args_valid = false;
         break;
     case SYS_CLOSE:
+        if (check_args_1(args, int))
+            sys_close(*((int *) args));
+        else
+            args_valid = false;
         break;
     default:
+        args_valid = false;
         break;
     }
+
+    if (!args_valid)
+        sys_exit(-1);
     return;
 }
 
@@ -134,4 +163,108 @@ bool mem_valid(const void *addr)
 {
     return (addr != NULL && is_user_vaddr(addr) &&
             pagedir_get_page(thread_current()->pagedir, addr) != NULL);
+}
+
+/* Terminates Pintos. */
+void sys_halt()
+{
+    shutdown_power_off();
+}
+
+/* Terminates the current process, returning status. */
+void sys_exit(int status)
+{
+    // TODO
+    return;
+}
+
+/* Runs the executable given by cmd_line. Returns the pid of
+ * the process.
+ */
+pid_t sys_exec(const char *cmd_line)
+{
+    // TODO
+    return 1;
+}
+
+/* Waits for child process to terminate, then returns the
+ * returned status.
+ */
+int sys_wait(pid_t pid)
+{
+    // TODO
+    return 1;
+}
+
+/* Creates a new file with initial_size bytes. Returns true on
+ * success.
+ */
+bool sys_create(const char *file, unsigned int initial_size)
+{
+    // TODO
+    return true;
+}
+
+/* Deletes the file called file. Returns true on success. */
+bool sys_remove(const char *file)
+{
+    // TODO
+    return true;
+}
+
+/* Opens the file called file. Returns the file descriptor or -1
+ * on failure.
+ * */
+int sys_open(const char *file)
+{
+    // TODO
+    return 1;
+}
+
+/* Returns the size of the file open, given the file descriptor. */
+int sys_filesize(int fd)
+{
+    // TODO
+    return 1;
+}
+
+/* Reads size bytes from the file fd into buffer. Returns the number
+ * of bytes actually read.
+ */
+int sys_read(int fd, void *buffer, unsigned int size)
+{
+    // TODO
+    return 1;
+}
+
+/* Writes size bytes from the buffer into the open file fd. Returns
+ * the number of bytes actually written.
+ */
+int sys_write(int fd, const void *buffer, unsigned int size)
+{
+    // TODO
+    return 1;
+}
+
+/* Changes the next byte to be read or written in file fd to position. */
+void sys_seek(int fd, unsigned int position)
+{
+    // TODO
+    return;
+}
+
+/* Returns the position of the next byte to be read or written
+ * in file fd.
+ */
+unsigned int sys_tell(int fd)
+{
+    // TODO
+    return 1;
+}
+
+/* Closes file descriptor fd. */
+void sys_close(int fd)
+{
+    // TODO
+    return;
 }
