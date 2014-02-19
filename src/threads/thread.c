@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -257,6 +258,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
         vector_init(&thread_exit_status);
         // Fill it with zeros up to the current tid.
         vector_zeros(&thread_exit_status, tid);
+        thread_exit_status_initialized = true;
     }
 
     // Add this thread to the exit status list. The thread is indexed
