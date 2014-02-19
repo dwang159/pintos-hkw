@@ -10,6 +10,7 @@
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "process.h"
+#include "threads/synch.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -122,7 +123,7 @@ static void syscall_handler(struct intr_frame *f) {
         if (check_args_3(args, int, void *, unsigned int)) {
             off1 = sizeof(int);
             off2 = off1 + sizeof(void *);
-            f->eax = (uint32_t) sys_read(*((int *) args), 
+            f->eax = (uint32_t) sys_read(*((int *) args),
                               *((void **) (args + off1)),
                               *((unsigned int *) (args + off2)));
         } else
@@ -132,7 +133,7 @@ static void syscall_handler(struct intr_frame *f) {
         if (check_args_3(args, int, void *, unsigned int)) {
             off1 = sizeof(int);
             off2 = off1 + sizeof(void *);
-            f->eax = (uint32_t) sys_write(*((int *) args), 
+            f->eax = (uint32_t) sys_write(*((int *) args),
                                *((void **) (args + off1)),
                                *((unsigned int *) (args + off2)));
         } else
@@ -220,18 +221,27 @@ int sys_wait(pid_t pid) {
  * success.
  */
 bool sys_create(const char *file, unsigned int initial_size) {
-    enum intr_level old_level = intr_disable();
+    if (!mem_valid(file))
+    {
+        sys_exit(-1);
+        return false;
+    }
+    if (file == NULL)
+    {
+        return false;
+    }
+    lock_acquire(&filesys_lock);
     bool ret = filesys_create(file, initial_size);
-    intr_set_level(old_level);
+    lock_release(&filesys_lock);
     return ret;
 }
 
 /* Deletes the file called file. Returns true on success. */
 bool sys_remove(const char *file) {
-    enum intr_level old_level = intr_disable();
+    lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
-    intr_set_level(old_level);
-    return ret; 
+    lock_release(&filesys_lock);
+    return ret;
 }
 
 /* Opens the file called file. Returns the file descriptor or -1
@@ -240,18 +250,22 @@ bool sys_remove(const char *file) {
 int sys_open(const char *file) {
     unsigned int i;
     /* Open file, return -1 on failure */
-    enum intr_level old_level = intr_disable();
+    lock_acquire(&filesys_lock);
     struct file *opened = filesys_open(file);
-    intr_set_level(old_level);
+    lock_release(&filesys_lock);
     if (opened == NULL)
         return -1;
 
     struct thread *curr = thread_current();
-    ASSERT(curr->files.size >= STDOUT_FILENO + 1)
-    /* Insert file into first non-null entry of file descriptor 
-     * table. Return the index where the file was inserted */
-    for(i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
-        if (curr->files.data[i] == NULL) {
+    ASSERT(curr->files.size >= STDOUT_FILENO + 1);
+
+    /* Insert file into first non-null entry of file descriptor
+     * table. Return the index where the file was inserted
+     */
+    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++)
+    {
+        if (curr->files.data[i] == NULL)
+        {
             curr->files.data[i] = opened;
             return i;
         }
@@ -263,9 +277,9 @@ int sys_open(const char *file) {
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd) {
-    enum intr_level old_level = intr_disable();
+    lock_acquire(&filesys_lock);
     int ret = file_length(thread_current()->files.data[fd]);
-    intr_set_level(old_level);
+    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -274,22 +288,22 @@ int sys_filesize(int fd) {
  */
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
-    if (!mem_valid(buffer + size)) {
-        thread_exit();
-        return -1;
-    }
-    if (fd == STDIN_FILENO) {
-        for (i = 0; i < size; i++) {
+
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1))
+        sys_exit(-1);
+    if (fd == STDIN_FILENO)
+    {
+        for (i = 0; i < size; i++)
+        {
             *((char *) buffer) = input_getc();
             buffer += sizeof(char);
         }
         return size;
     } else {
-        enum intr_level old_level = intr_disable();
-        int ret = (int) file_read(thread_current()->files.data[fd], 
-                                  buffer, 
-                                  size);
-        intr_set_level(old_level);
+        lock_acquire(&filesys_lock);
+        int ret = (int) file_read(thread_current()->files.data[fd],
+                buffer, size);
+        lock_release(&filesys_lock);
         return ret;
     }
 }
@@ -297,39 +311,38 @@ int sys_read(int fd, void *buffer, unsigned int size) {
 /* Writes size bytes from the buffer into the open file fd. Returns
  * the number of bytes actually written.
  */
-int sys_write(int fd, const void *buffer, unsigned int size) {
-    if (!mem_valid(buffer + size)) {
-        thread_exit();
-        return -1;
-    }
-    if (fd == STDOUT_FILENO) {
+int sys_write(int fd, const void *buffer, unsigned int size)
+{
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1))
+        sys_exit(-1);
+
+    if (fd == STDOUT_FILENO)
+    {
         putbuf((char *) buffer, size);
         return size;
     } else {
-        enum intr_level old_level = intr_disable();
-        int ret = (int) file_write(thread_current()->files.data[fd], 
-                                   buffer, 
-                                   size);
-        intr_set_level(old_level);
+        lock_acquire(&filesys_lock);
+        int ret = (int) file_write(thread_current()->files.data[fd],
+                buffer, size);
+        lock_release(&filesys_lock);
         return ret;
     }
 }
 
 /* Changes the next byte to be read or written in file fd to position. */
 void sys_seek(int fd, unsigned int position) {
-    enum intr_level old_level = intr_disable();
+    lock_acquire(&filesys_lock);
     file_seek(thread_current()->files.data[fd], position);
-    intr_set_level(old_level);
-    return;
+    lock_release(&filesys_lock);
 }
 
 /* Returns the position of the next byte to be read or written
  * in file fd.
  */
 unsigned int sys_tell(int fd) {
-    enum intr_level old_level = intr_disable();
+    lock_acquire(&filesys_lock);
     unsigned int ret = file_tell(thread_current()->files.data[fd]);
-    intr_set_level(old_level);
+    lock_release(&filesys_lock);
     return ret;
 }
 
