@@ -202,16 +202,14 @@ void sys_exit(int status)
 /* Runs the executable given by cmd_line. Returns the pid of
  * the process.
  */
-pid_t sys_exec(const char *cmd_line)
-{
-    return 1;
+pid_t sys_exec(const char *cmd_line) {
+    return process_execute(cmd_line);
 }
 
 /* Waits for child process to terminate, then returns the
  * returned status.
  */
-int sys_wait(pid_t pid)
-{
+int sys_wait(pid_t pid) {
     // We map pids directly into tids, so we know the tid of the
     // thread we want.
     return process_wait((tid_t) pid);
@@ -220,17 +218,14 @@ int sys_wait(pid_t pid)
 /* Creates a new file with initial_size bytes. Returns true on
  * success.
  */
-bool sys_create(const char *file, unsigned int initial_size)
-{
-    // TODO
-    return true;
+bool sys_create(const char *file, unsigned int initial_size) {
+    return filesys_create(file, initial_size);
 }
 
 /* Deletes the file called file. Returns true on success. */
 bool sys_remove(const char *file)
 {
-    // TODO
-    return true;
+    return filesys_remove(file);
 }
 
 /* Opens the file called file. Returns the file descriptor or -1
@@ -238,15 +233,15 @@ bool sys_remove(const char *file)
  * */
 int sys_open(const char *file)
 {
-    // TODO
-    return 1;
+    struct file *opened = filesys_open(file);
+    vector_append(
 }
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd)
 {
-    // TODO
-    return 1;
+    file struct *to_size= vector_get(files, fd);
+    return file_length(to_size);
 }
 
 /* Reads size bytes from the file fd into buffer. Returns the number
