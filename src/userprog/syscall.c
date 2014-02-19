@@ -242,6 +242,11 @@ bool sys_remove(const char *file) {
  * on failure.
  * */
 int sys_open(const char *file) {
+    /* Check for invalid pointer */
+    if (!mem_valid(file))
+    {
+        sys_exit(-1);
+    }
     unsigned int i;
     /* Open file, return -1 on failure */
     lock_acquire(&filesys_lock);
@@ -281,12 +286,11 @@ int sys_filesize(int fd) {
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
 
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1))
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) 
+        || fd == STDOUT_FILENO)
         sys_exit(-1);
-    if (fd == STDIN_FILENO)
-    {
-        for (i = 0; i < size; i++)
-        {
+    if (fd == STDIN_FILENO) {
+        for (i = 0; i < size; i++) {
             *((char *) buffer) = input_getc();
             buffer += sizeof(char);
         }
@@ -305,7 +309,8 @@ int sys_read(int fd, void *buffer, unsigned int size) {
  */
 int sys_write(int fd, const void *buffer, unsigned int size)
 {
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1))
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1)
+        || fd == STDIN_FILENO) 
         sys_exit(-1);
 
     if (fd == STDOUT_FILENO)
@@ -339,11 +344,13 @@ unsigned int sys_tell(int fd) {
 }
 
 /* Closes file descriptor fd. */
-void sys_close(int fd) {
-    if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
-        return;
-    }
+void sys_close(int fd)
+{
     struct thread *curr = thread_current();
+    if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
+    {
+        sys_exit(-1);
+    }
     lock_acquire(&filesys_lock);
     file_close(curr->files.data[fd]);
     lock_release(&filesys_lock);
