@@ -58,6 +58,10 @@ static long long user_ticks;    /*!< # of timer ticks in user programs. */
 #define TIME_SLICE 4            /*!< # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
 
+// Keeps track of threads' exit statuses.
+bool thread_exit_status_initialized;
+struct vector thread_exit_status;
+
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
     Controlled by kernel command-line option "-o mlfqs". */
@@ -105,6 +109,8 @@ void thread_init(void) {
     lock_init(&tid_lock);
     list_init(&all_list);
     list_init(&sleep_list);
+
+    thread_exit_status_initialized = false;
 
     /* Initialize each list in ready_lists. */
     for (i = PRI_MIN; i <= PRI_MAX; i++) {
@@ -241,6 +247,23 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     }
 
     tid = t->tid = allocate_tid();
+
+    // We can't initialize this in thread_init, so we do it here.
+    if (!thread_exit_status_initialized) {
+        vector_init(&thread_exit_status);
+        // Fill it with zeros up to the current tid.
+        vector_zeros(&thread_exit_status, tid);
+    }
+
+    // Add this thread to the exit status list. The thread is indexed
+    // by its tid, so vector[tid] should access the struct for this thread.
+    // Since tid is incremental, we can simply append to do this.
+    struct exit_state *es;
+    es = (struct exit_state *) malloc(sizeof(struct exit_state));
+    ASSERT(es);
+    es->parent = thread_current()->tid;
+    sema_init(&es->waiting, 0);
+    vector_append(&thread_exit_status, es);
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);

@@ -43,6 +43,7 @@ void vector_insert(struct vector *v, unsigned int pos, void *value);
 void vector_append(struct vector *v, void *value);
 void vector_remove(struct vector *v, unsigned int pos);
 void vector_destruct(struct vector *v);
+void vector_zeros(struct vector *v, unsigned int num);
 
 bool vector_empty(struct vector *v);
 
