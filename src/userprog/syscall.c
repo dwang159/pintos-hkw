@@ -226,10 +226,6 @@ bool sys_create(const char *file, unsigned int initial_size) {
         sys_exit(-1);
         return false;
     }
-    if (file == NULL)
-    {
-        return false;
-    }
     lock_acquire(&filesys_lock);
     bool ret = filesys_create(file, initial_size);
     lock_release(&filesys_lock);
@@ -349,6 +345,10 @@ unsigned int sys_tell(int fd) {
 /* Closes file descriptor fd. */
 void sys_close(int fd)
 {
+    if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
+    {
+        return;
+    }
     struct thread *curr = thread_current();
     lock_acquire(&filesys_lock);
     file_close(curr->files.data[fd]);
