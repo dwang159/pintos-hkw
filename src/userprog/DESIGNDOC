@@ -59,15 +59,45 @@ Daniel Wang <dwang@caltech.edu>
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+In lib/kernel, vector.h and vector.c are an entirely new implementation
+of a dynamic array (C++ vector). The functions and fields associated 
+with the vector are documented in those files.
+In /threads/thread.h: added struct vector files to struct thread.
+This vector keeps track of file descriptors and open files for the associated
+thread.
+In thread.h: struct lock filesys_lock
+This lock prevents more than one thread from using the filesys code.
+TODO: exit_status stuff------------------------------------------------------------
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+File descriptors are kept in a dynamic array on a per-process basis, so each
+file descriptor is only unique within a single process. This dynamic array,
+files, contains a list of file *s that point to the approriate file. To
+find the file associated with descriptor fd, we return the pointer at
+index fd in file.data. When closing files, we set the pointer at the closed
+fd to NULL. When we open a new file, we insert the file pointer at the first
+NULL seen, or append it to the end of the array if no NULLs were found.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+After ensuring stack and argument adresses are valid, we examine the buffer
+pointer as well as the buffer + size - 1. We also ensure that the file
+descriptor given to us is valid (non-null and not STDIN/STDOUT for write
+and read, respectively). If any of these checks fail, we exit with status
+-1.
+For reading, we have a special case if fd == STDIN_FILENO that calls
+input_getc to read from the keyboard. Otherwise, we acquire the filesys
+lock and call the file_read function on the file in index fd of the files
+vector of the current thread. We release the lock and return the value
+passed to us by the filesys function.
+For writing, we have a special case if fd == STDOUT_FILENO that calls
+putbuf to write to the console. Otherwise, similar to read, we acquire
+the filesys lock, call the file_write function, release the lock, and
+return the value passed to us.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -75,6 +105,16 @@ Daniel Wang <dwang@caltech.edu>
 >> (e.g. calls to pagedir_get_page()) that might result?  What about
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
+The maximum number of page table inspections is 2 for both 4096 and
+2 bytes. For 4096, it is unlikely that there exists much room for
+improvement without wasting a lot of memory, since there exists only one
+possible arrangement of memory that will allow the data to fit on a
+single page. On the other hand, for 2 bytes, we can easily ensure that
+only one page is examined by checking if the data crosses a page boundary
+and moving it over to the beginning of the second page. This wastes a
+byte of memory, but the time savings outweigh this small cost. On the
+other hand, for the 4096 byte block, if we were to do the same thing, we
+would waste a much larger amount of memory, causing fragmentation issues.
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
@@ -92,6 +132,28 @@ Daniel Wang <dwang@caltech.edu>
 >> allocated resources (locks, buffers, etc.) are freed?  In a few
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
+Our syscall handler immediately checks the passed stack pointer in order to
+ensure the syscall number can be obtained. We then enter into a huge switch
+block, with a case for each syscall number. In each of these calls with
+additional arguments, we call a function, check_args_x(), where x is 1, 2, 
+or 3. This checks the validity of the arguments on the stack, and cuts
+down on redundancy. If any of these checks fail, we exit with return value
+-1. With this design, we centralize all of our stack/argument pointer
+error checking. We still must check validity of pointers passed as arguments
+to the syscalls, which is done in each individual call, but because these are
+specific to the call, this decentralization is unavoidable.
+When an error is detected, we free all resources by calling exit(-1). This
+terminates the process and thread. In thread termination, we iterate through
+the list of locks held by the thread and release all of them. In process
+termination, we destroy the page directory, close open files, and delete the 
+vector of file descriptors.
+Suppose we have a call to close. Our program will check the passed stack
+pointer for validity, then dereference it for the syscall number. Then, it
+will proceed to the SYS_EXIT case and examine the single argument. It then
+calls sys_close(). This function validates the file descriptor passed to it.
+Suppose this check fails. Then, we call exit(-1), which causes thread
+termination (releasing locks) and process termination (freeing memory and
+closing files).
 
 ---- SYNCHRONIZATION ----
 

@@ -45,6 +45,9 @@ void sys_close(int fd);
 /* Checks if memory address is valid. */
 bool mem_valid(const void *addr);
 
+/* Checks file descriptor. */
+bool fd_valid(int fd);
+
 void syscall_init(void) {
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
@@ -170,14 +173,20 @@ static void syscall_handler(struct intr_frame *f) {
     return;
 }
 
-/* Checks that addr points into user space on a currently mapped page.
- * We check the addr and the byte just before addr + size. So if we
- * wanted to check an integer at addr, we check addr and addr + 3 to
- * make sure both are valid.
- */
+/* Checks that addr points into user space on a currently mapped page. */
 bool mem_valid(const void *addr) {
     return (addr != NULL && is_user_vaddr(addr) &&
             pagedir_get_page(thread_current()->pagedir, addr) != NULL);
+}
+
+/* Checks if the file descriptor is valid. */
+bool fd_valid(int fd) {
+    struct thread *curr = thread_current();
+    // File pointer should not be null unless it is STDIN or STDOUT.
+    if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
+        if (fd >= curr->files.size || curr->files.data[fd] == NULL)
+            return false;
+    return true;
 }
 
 /* Terminates Pintos. */
@@ -205,7 +214,12 @@ void sys_exit(int status) {
  * the process.
  */
 pid_t sys_exec(const char *cmd_line) {
-    return process_execute(cmd_line);
+    if (!mem_valid(cmd_line))
+        sys_exit(-1);
+    enum intr_level old_level = intr_disable();
+    pid_t ret = process_execute(cmd_line);
+    intr_set_level(old_level);
+    return ret;
 }
 
 /* Waits for child process to terminate, then returns the
@@ -232,6 +246,8 @@ bool sys_create(const char *file, unsigned int initial_size) {
 
 /* Deletes the file called file. Returns true on success. */
 bool sys_remove(const char *file) {
+    if (!mem_valid(file))
+        sys_exit(-1);
     lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
     lock_release(&filesys_lock);
@@ -244,9 +260,7 @@ bool sys_remove(const char *file) {
 int sys_open(const char *file) {
     /* Check for invalid pointer */
     if (!mem_valid(file))
-    {
         sys_exit(-1);
-    }
     unsigned int i;
     /* Open file, return -1 on failure */
     lock_acquire(&filesys_lock);
@@ -274,6 +288,8 @@ int sys_open(const char *file) {
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd) {
+    if (!fd_valid(fd))
+        sys_exit(-1);
     lock_acquire(&filesys_lock);
     int ret = file_length(thread_current()->files.data[fd]);
     lock_release(&filesys_lock);
@@ -285,10 +301,12 @@ int sys_filesize(int fd) {
  */
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
+    struct thread *curr = thread_current();
 
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) 
-        || fd == STDOUT_FILENO)
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
+            fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
+
     if (fd == STDIN_FILENO) {
         for (i = 0; i < size; i++) {
             *((char *) buffer) = input_getc();
@@ -297,7 +315,7 @@ int sys_read(int fd, void *buffer, unsigned int size) {
         return size;
     } else {
         lock_acquire(&filesys_lock);
-        int ret = (int) file_read(thread_current()->files.data[fd],
+        int ret = (int) file_read(curr->files.data[fd],
                 buffer, size);
         lock_release(&filesys_lock);
         return ret;
@@ -309,8 +327,8 @@ int sys_read(int fd, void *buffer, unsigned int size) {
  */
 int sys_write(int fd, const void *buffer, unsigned int size)
 {
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1)
-        || fd == STDIN_FILENO) 
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
+            fd == STDIN_FILENO || !fd_valid(fd))
         sys_exit(-1);
 
     if (fd == STDOUT_FILENO)
@@ -328,6 +346,8 @@ int sys_write(int fd, const void *buffer, unsigned int size)
 
 /* Changes the next byte to be read or written in file fd to position. */
 void sys_seek(int fd, unsigned int position) {
+    if (!fd_valid(fd))
+        sys_exit(-1);
     lock_acquire(&filesys_lock);
     file_seek(thread_current()->files.data[fd], position);
     lock_release(&filesys_lock);
@@ -337,6 +357,8 @@ void sys_seek(int fd, unsigned int position) {
  * in file fd.
  */
 unsigned int sys_tell(int fd) {
+    if (!fd_valid(fd))
+        sys_exit(-1);
     lock_acquire(&filesys_lock);
     unsigned int ret = file_tell(thread_current()->files.data[fd]);
     lock_release(&filesys_lock);
@@ -347,10 +369,8 @@ unsigned int sys_tell(int fd) {
 void sys_close(int fd)
 {
     struct thread *curr = thread_current();
-    if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
-    {
+    if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
-    }
     lock_acquire(&filesys_lock);
     file_close(curr->files.data[fd]);
     lock_release(&filesys_lock);

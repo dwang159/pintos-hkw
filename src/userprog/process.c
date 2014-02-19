@@ -60,6 +60,7 @@ static void start_process(void *file_name_) {
     struct thread *curr = thread_current();
 
     // Set up the args and mems arrays.
+    //TODO ensure no overflow of stack page
     maxlen = strlen(file_name);
     args = (char **)malloc(maxlen * sizeof(char *));
     mems = (void **)malloc(maxlen * sizeof(void *));
@@ -211,6 +212,13 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
+    /* TODO close open files 
+    unsigned int i;
+    for (i = 0; i < curr->files.size; i++)
+    {
+        if (curr->files.data[i] != NULL)
+            sys_close(i);
+    }*/
     vector_destruct(&curr->files);
 }
 
