@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "pagedir.h"
+#include "devices/shutdown.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -56,7 +57,6 @@ static void syscall_handler(struct intr_frame *f) {
 
     int syscall_nr = *((int *) esp);
     int off1, off2;
-    printf("syscall: %d\n", syscall_nr);
     args = esp + sizeof(int);
 
     // Check that all args are within user memory and call the
@@ -159,6 +159,7 @@ static void syscall_handler(struct intr_frame *f) {
         break;
     }
 
+    /* If something went wrong, then we exit with status code -1. */
     if (!args_valid)
         sys_exit(-1);
     return;
@@ -184,7 +185,18 @@ void sys_halt()
 /* Terminates the current process, returning status. */
 void sys_exit(int status)
 {
-    return;
+    // Set the exit status.
+    struct thread *t = thread_current();
+
+    // Print exit message.
+    printf("%s: exit(%d)\n", t->name, status);
+
+    struct exit_state *es = thread_exit_status.data[t->tid];
+    es->exit_status = status;
+    // Wake up parent if it was waiting on child. This also indicates
+    // that the thread has exited.
+    sema_up(&es->waiting);
+    thread_exit();
 }
 
 /* Runs the executable given by cmd_line. Returns the pid of
@@ -200,8 +212,9 @@ pid_t sys_exec(const char *cmd_line)
  */
 int sys_wait(pid_t pid)
 {
-    // TODO
-    return 1;
+    // We map pids directly into tids, so we know the tid of the
+    // thread we want.
+    return process_wait((tid_t) pid);
 }
 
 /* Creates a new file with initial_size bytes. Returns true on
