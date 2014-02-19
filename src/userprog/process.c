@@ -40,6 +40,8 @@ tid_t process_execute(const char *file_name) {
 
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+    struct exit_state *es = thread_exit_status.data[tid];
+    sema_init(&es->launching, 0);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
     return tid;
@@ -84,6 +86,10 @@ static void start_process(void *file_name_) {
     if_.eflags = FLAG_IF | FLAG_MBS;
 
     success = load(args[0], &if_.eip, &if_.esp);
+    tid_t tid = thread_current()->tid;
+    struct exit_state *es = thread_exit_status.data[tid];
+    es->load_successful = success;
+    sema_up(&es->launching);
 
     /* If load failed, quit. */
     if (!success) {
@@ -113,8 +119,7 @@ static void start_process(void *file_name_) {
 
     // Push each element of argv onto the stack. We start with
     // i = arglen because we push a null value as argv[argc].
-    for (i = arglen; i >= 0; i--)
-    {
+    for (i = arglen; i >= 0; i--) {
         stack -= sizeof(void *);
         memcpy(stack, &mems[i], sizeof(void *));
     }

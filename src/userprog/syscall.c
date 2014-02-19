@@ -184,8 +184,10 @@ bool fd_valid(int fd) {
     struct thread *curr = thread_current();
     // File pointer should not be null unless it is STDIN or STDOUT.
     if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
-        if (fd >= curr->files.size || curr->files.data[fd] == NULL)
+        if ((unsigned) fd >= curr->files.size ||
+            curr->files.data[fd] == NULL) {
             return false;
+        }
     return true;
 }
 
@@ -219,7 +221,9 @@ pid_t sys_exec(const char *cmd_line) {
     enum intr_level old_level = intr_disable();
     pid_t ret = process_execute(cmd_line);
     intr_set_level(old_level);
-    return ret;
+    struct exit_state *es = thread_exit_status.data[ret];
+    sema_down(&es->launching);
+    return es->load_successful ? ret : TID_ERROR;
 }
 
 /* Waits for child process to terminate, then returns the
@@ -325,14 +329,12 @@ int sys_read(int fd, void *buffer, unsigned int size) {
 /* Writes size bytes from the buffer into the open file fd. Returns
  * the number of bytes actually written.
  */
-int sys_write(int fd, const void *buffer, unsigned int size)
-{
+int sys_write(int fd, const void *buffer, unsigned int size) {
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
             fd == STDIN_FILENO || !fd_valid(fd))
         sys_exit(-1);
 
-    if (fd == STDOUT_FILENO)
-    {
+    if (fd == STDOUT_FILENO) {
         putbuf((char *) buffer, size);
         return size;
     } else {
