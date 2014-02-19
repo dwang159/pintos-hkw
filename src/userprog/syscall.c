@@ -55,6 +55,7 @@ static void syscall_handler(struct intr_frame *f) {
     }
 
     int syscall_nr = *((int *) esp);
+    int off1, off2;
     printf("syscall: %d\n", syscall_nr);
     args = esp + sizeof(int);
 
@@ -76,65 +77,74 @@ static void syscall_handler(struct intr_frame *f) {
         break;
     case SYS_EXEC:
         if (check_args_1(args, char *))
-            sys_exec(*((char **) args));
+            f->eax = (uint32_t) sys_exec(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_WAIT:
         if (check_args_1(args, pid_t))
-            sys_wait(*((pid_t *) args));
+            /* Put return value in %eax */
+            f->eax = (uint32_t) sys_wait(*((pid_t *) args));
         else
             args_valid = false;
         break;
     case SYS_CREATE:
-        if (check_args_2(args, char *, unsigned int))
-            sys_create(*((char **) args),
-                    *((unsigned int *)(args + sizeof(char *))));
-        else
+        if (check_args_2(args, char *, unsigned int)) {
+            off1 = sizeof(char*);
+            f->eax = (uint32_t) sys_create(*((char **) args),
+                                *((unsigned int *)(args + off1)));
+        } else
             args_valid = false;
         break;
     case SYS_REMOVE:
         if (check_args_1(args, char *))
-            sys_remove(*((char **) args));
+            f->eax = (uint32_t) sys_remove(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_OPEN:
         if (check_args_1(args, char *))
-            sys_remove(*((char **) args));
+            f->eax = (uint32_t) sys_open(*((char **) args));
         else
             args_valid = false;
         break;
     case SYS_FILESIZE:
         if (check_args_1(args, int))
-            sys_remove(*((int *) args));
+            f->eax = (uint32_t) sys_filesize(*((int *) args));
         else
             args_valid = false;
         break;
     case SYS_READ:
-        if (check_args_3(args, int, void *, unsigned int))
-            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
-                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
-        else
+        if (check_args_3(args, int, void *, unsigned int)) {
+            off1 = sizeof(int);
+            off2 = off1 + sizeof(void *);
+            f->eax = (uint32_t) sys_read(*((int *) args), 
+                              *((void **) (args + off1)),
+                              *((unsigned int *) (args + off2)));
+        } else
             args_valid = false;
         break;
     case SYS_WRITE:
-        if (check_args_3(args, int, void *, unsigned int))
-            sys_read(*((int *) args), *((void **) (args + sizeof(int))),
-                    *((unsigned int *) (args + sizeof(int) + sizeof(void *))));
-        else
+        if (check_args_3(args, int, void *, unsigned int)) {
+            off1 = sizeof(int);
+            off2 = off1 + sizeof(void *);
+            f->eax = (uint32_t) sys_write(*((int *) args), 
+                               *((void **) (args + off1)),
+                               *((unsigned int *) (args + off2)));
+        } else
             args_valid = false;
         break;
     case SYS_SEEK:
-        if (check_args_2(args, int, unsigned int))
+        if (check_args_2(args, int, unsigned int)) {
+            off1 = sizeof(int);
             sys_seek(*((int *) args),
-                    *((unsigned int **) (args + sizeof(int))));
-        else
+                     *((unsigned int **) (args + off1)));
+        } else
             args_valid = false;
         break;
     case SYS_TELL:
         if (check_args_1(args, int))
-            sys_tell(*((int *) args));
+            f->eax = (uint32_t) sys_tell(*((int *) args));
         else
             args_valid = false;
         break;
@@ -174,7 +184,6 @@ void sys_halt()
 /* Terminates the current process, returning status. */
 void sys_exit(int status)
 {
-    // TODO
     return;
 }
 
@@ -183,7 +192,6 @@ void sys_exit(int status)
  */
 pid_t sys_exec(const char *cmd_line)
 {
-    // TODO
     return 1;
 }
 
