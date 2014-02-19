@@ -114,8 +114,7 @@ static void start_process(void *file_name_) {
     free(args);
 
     // Word-align stack
-    stack -= ((unsigned int) stack) % sizeof(void *) + sizeof(void *);
-    memset(stack, 0, sizeof(void *));
+    stack -= ((unsigned int) stack) % sizeof(void *);
 
     // Push each element of argv onto the stack. We start with
     // i = arglen because we push a null value as argv[argc].

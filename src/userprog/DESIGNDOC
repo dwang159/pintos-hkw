@@ -42,14 +42,26 @@ Daniel Wang <dwang@caltech.edu>
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
+We used strtok_r to split the string into space-separated tokens, then
+use the pointer to esp to push each token onto the stack. When we do
+this, we each memory location in an array, and place a NULL at the end
+of the array. Then, we word-align the stack and iterate through the array
+of memory addresses backwards, ensuring that our arguments are push in 
+the correct order. We then push argc and a dummy return value.
+To avoid overflowing the stack page, we TODO-----------------------------------
 
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+strtok_r is reentrant, so it is a thread safe function. strtok is not, and
+has undefined behavior if called from multiple threads. Since we have a
+lot of concurrency going on, we want the thread safe version, since it
+will be safer and more correct than strtok.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+If 
 
                              SYSTEM CALLS
                              ============
@@ -173,9 +185,23 @@ closing files).
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
+We chose the simpler method of user memory access for ease of debugging
+and maintenance. We centralized our memory checks as much as possible to
+cut down on redundancy and improve code readability. For the functions
+that required extra memory checks, we inserted those checks into the
+calls themselves, since this was unique to those calls and therefore
+made sense to be associated with the call. 
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
+By using a dynamic array, we save space inside of the thread struct,
+allowing for more space for the stack. In addition, we have the
+benefit of constant time random access, along with a theoretical
+infinite bound to the number of open files. As a tradeoff, the complexity
+of code is increased, since we wrote an entire dynamic array. It also
+makes the closing of files slightly more painful, since we need to keep
+track of which entries are NULL and replace them with new files if
+necessary in order to save space.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
