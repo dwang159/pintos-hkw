@@ -194,25 +194,25 @@ int process_wait(tid_t child_tid) {
 
 /*! Free the current process's resources. */
 void process_exit(void) {
-    struct thread *cur = thread_current();
+    struct thread *curr = thread_current();
     uint32_t *pd;
 
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
-    pd = cur->pagedir;
+    pd = curr->pagedir;
     if (pd != NULL) {
         /* Correct ordering here is crucial.  We must set
-           cur->pagedir to NULL before switching page directories,
+           curr->pagedir to NULL before switching page directories,
            so that a timer interrupt can't switch back to the
            process page directory.  We must activate the base page
            directory before destroying the process's page
            directory, or our active page directory will be one
            that's been freed (and cleared). */
-        cur->pagedir = NULL;
+        curr->pagedir = NULL;
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
-    vector_destruct(&cur->files);
+    vector_destruct(&curr->files);
 }
 
 /*! Sets up the CPU for running user code in the current thread.
