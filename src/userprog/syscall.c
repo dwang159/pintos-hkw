@@ -221,13 +221,10 @@ int sys_wait(pid_t pid) {
  * success.
  */
 bool sys_create(const char *file, unsigned int initial_size) {
-    if (!mem_valid(file))
-    {
+    if (!mem_valid(file)) {
         sys_exit(-1);
-        return false;
     }
-    if (file == NULL)
-    {
+    if (*file == '\0') {
         return false;
     }
     lock_acquire(&filesys_lock);
@@ -262,10 +259,8 @@ int sys_open(const char *file) {
     /* Insert file into first non-null entry of file descriptor
      * table. Return the index where the file was inserted
      */
-    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++)
-    {
-        if (curr->files.data[i] == NULL)
-        {
+    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
+        if (curr->files.data[i] == NULL) {
             curr->files.data[i] = opened;
             return i;
         }
