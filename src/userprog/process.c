@@ -141,6 +141,7 @@ static void start_process(void *file_name_) {
 
     // Set up the file descriptor table.
     vector_init(&curr->files);
+    vector_zeros(&curr->files, STDOUT_FILENO + 1);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
