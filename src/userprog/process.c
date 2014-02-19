@@ -23,10 +23,10 @@
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
-/*! Starts a new thread running a user program loaded from FILENAME.  The new
-    thread may be scheduled (and may even exit) before process_execute()
-    returns.  Returns the new process's thread id, or TID_ERROR if the thread
-    cannot be created. */
+/*! Starts a new thread running a user program loaded from FILENAME.
+ *  The new thread may be scheduled (and may even exit) before 
+ *  process_execute() returns.  Returns the new process's thread id, 
+ *  or TID_ERROR if the thread cannot be created. */
 tid_t process_execute(const char *file_name) {
     char *fn_copy;
     tid_t tid;
@@ -66,8 +66,7 @@ static void start_process(void *file_name_) {
     ASSERT(args && mems);
 
     // Tokenize input, place into args array
-    for (arglen = 0, str = file_name; ; arglen++, str = NULL)
-    {
+    for (arglen = 0, str = file_name; ; arglen++, str = NULL) {
         token = strtok_r(str, " ", &saveptr);
         if (token == NULL)
             break;
@@ -94,8 +93,7 @@ static void start_process(void *file_name_) {
     stack = if_.esp;
 
     // Put each token onto the stack, saving its location in mems.
-    for (i = 0; i < arglen; i++)
-    {
+    for (i = 0; i < arglen; i++) {
         stack -= strlen(args[i]) + 1;
         strlcpy((char *) stack, args[i], strlen(args[i]) + 1);
         mems[i] = stack;
@@ -165,7 +163,7 @@ int process_wait(tid_t child_tid) {
     int status;
 
     // Check if tid is valid.
-    if (child_tid >= thread_exit_status.size)
+    if (child_tid >= (tid_t) thread_exit_status.size)
         return -1;
 
     es = thread_exit_status.data[child_tid];
