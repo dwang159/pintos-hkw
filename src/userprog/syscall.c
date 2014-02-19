@@ -9,6 +9,7 @@
 #include "filesys/filesys.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
+#include "process.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -26,7 +27,7 @@
 static void syscall_handler(struct intr_frame *);
 
 /* System calls. */
-void sys_halt();
+void sys_halt(void);
 void sys_exit(int status);
 pid_t sys_exec(const char *cmd_line);
 int sys_wait(pid_t pid);
@@ -141,7 +142,7 @@ static void syscall_handler(struct intr_frame *f) {
         if (check_args_2(args, int, unsigned int)) {
             off1 = sizeof(int);
             sys_seek(*((int *) args),
-                     *((unsigned int **) (args + off1)));
+                     *((unsigned int *) (args + off1)));
         } else
             args_valid = false;
         break;
@@ -245,8 +246,8 @@ int sys_open(const char *file) {
     if (opened == NULL)
         return -1;
 
-    struct thread *cur = thread_current();
-    ASSERT(cur->files.size >= STDOUT_FILENO + 1)
+    struct thread *curr = thread_current();
+    ASSERT(curr->files.size >= STDOUT_FILENO + 1)
     /* Insert file into first non-null entry of file descriptor 
      * table. Return the index where the file was inserted */
     for(i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
@@ -256,7 +257,7 @@ int sys_open(const char *file) {
         }
     }
     /* If all current values are non-null, append */
-    vector_append(&cur->files, opened);
+    vector_append(&curr->files, opened);
     return (curr->files.size - 1);
 }
 
