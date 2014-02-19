@@ -216,7 +216,10 @@ void sys_exit(int status) {
 pid_t sys_exec(const char *cmd_line) {
     if (!mem_valid(cmd_line))
         sys_exit(-1);
-    return process_execute(cmd_line);
+    enum intr_level old_level = intr_disable();
+    pid_t ret = process_execute(cmd_line);
+    intr_set_level(old_level);
+    return ret;
 }
 
 /* Waits for child process to terminate, then returns the
