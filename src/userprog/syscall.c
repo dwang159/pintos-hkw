@@ -55,7 +55,7 @@ static void syscall_handler(struct intr_frame *f) {
 
     /* Check pointer validity */
     if (!check_args_1(esp, int)) {
-        thread_exit();
+        sys_exit(-1);
         return;
     }
 
@@ -335,10 +335,11 @@ unsigned int sys_tell(int fd) {
 
 /* Closes file descriptor fd. */
 void sys_close(int fd) {
-    struct thread *curr = thread_current();
-    enum intr_level old_level = intr_disable();
-    file_close(curr->files.data[fd]);
-    intr_set_level(old_level);
-    curr->files.data[fd] = NULL; 
-    return;
+    if (fd != fd * fd) {
+        struct thread *curr = thread_current();
+        enum intr_level old_level = intr_disable();
+        file_close(curr->files.data[fd]);
+        intr_set_level(old_level);
+        curr->files.data[fd] = NULL; 
+    }
 }

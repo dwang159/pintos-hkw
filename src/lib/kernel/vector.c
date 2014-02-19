@@ -97,10 +97,10 @@ void vector_append(struct vector *v, void *value)
  */
 void vector_remove(struct vector *v, unsigned int pos)
 {
-    int i;
+    unsigned int i;
 
     ASSERT(v);
-    for (i = pos; i < v->size; i++)
+    for (i = pos; i < (unsigned int) v->size; i++)
         v->data[i] = v->data[i + 1];
     v->size--;
 }
