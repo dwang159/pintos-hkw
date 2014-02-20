@@ -12,7 +12,7 @@ Tim Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment:
+>> Specify how many late tokens you are using on this assignment: 0
 
 >> What is the Git repository and commit hash for your submission?
 
@@ -51,10 +51,11 @@ use the pointer to esp to push each token onto the stack. When we do
 this, we put the pointer to each arg in an array, and place a NULL at the end
 of the array. Then, we word-align the stack and iterate through the array
 of memory addresses backwards, ensuring that our arguments are push in
-the correct order. We then push argc and a dummy return value.
+the correct order. We then push argv, argc and a dummy return value.
+
 To avoid overflowing the stack page, we check to ensure that the length
 of the arguments plus the length of the argument pointers plus the
-additional things pushed onto the stack (argc, NULL, dummy return, word-
+additional things pushed onto the stack (argv, argc, NULL, dummy return, word-
 align) does not exceed page size. If it does, we terminate the process.
 
 ---- RATIONALE ----
@@ -74,6 +75,7 @@ If the shell does this, we can cut out unnecessary code from the kernel,
 making it easier to maintain and closer to the microkernel ideal. This
 improves the scalability of the kernel without trading too much in
 performance.
+
 In addition, if we keep the argument parsing in user space, we don't need
 to worry so much about checking invalid memory, since this is already done
 by the kernel. Since we're in user space, we handle this through segfaults
@@ -188,6 +190,32 @@ would waste a much larger amount of memory, causing fragmentation issues.
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
+The wait system call uses process_wait() on the provided tid, since we
+have an identity mapping between tids and pids. Our process_wait()
+implementation uses the thread_exit_status vector to look up the
+exit status of its child.
+
+This is what happens in process_wait():
+
+- We look up the struct exit_status * that contains exit information for
+  a given thread using the thread_exit_status vector. If this doesn't exist
+  (the pointer is NULL), then the parent has already waited for this child
+  and immediately returns -1. Also if the tid is invalid or the thread is
+  not a child of the parent, then we return -1.
+
+- We call sema_down on the semaphore in the struct exit_status. This will
+  block the parent until the child finishes executing - the child calls
+  sema_up when it exits. If the child has already exited, then the
+  semaphore has a value of 1, so sema_down works immediately.
+
+- We then look up the exit status stored in the struct and return it. We
+  also free the memory and set the pointer to NULL so that the parent
+  cannot wait on this child again.
+
+When a child exits, it calls sema_up() on its semaphore just before it
+calls schedule, inside the interrupt disabled section. This ensures that
+the parent can't preempt the child before all resources are freed.
+
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
 >> process to be terminated.  System calls are fraught with such
@@ -201,6 +229,7 @@ would waste a much larger amount of memory, causing fragmentation issues.
 >> allocated resources (locks, buffers, etc.) are freed?  In a few
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
+
 Our syscall handler immediately checks the passed stack pointer in order to
 ensure the syscall number can be obtained. We then enter into a huge switch
 block, with a case for each syscall number. In each of these calls with
@@ -211,16 +240,18 @@ down on redundancy. If any of these checks fail, we exit with return value
 error checking. We still must check validity of pointers passed as arguments
 to the syscalls, which is done in each individual call, but because these are
 specific to the call, this decentralization is unavoidable.
+
 When an error is detected, we free all resources by calling exit(-1). This
 terminates the process and thread. In thread termination, we iterate through
 the list of locks held by the thread and release all of them. In process
 termination, we destroy the page directory, close open files, and delete the
 vector of file descriptors.
+
 Suppose we have a call to close. Our program will check the passed stack
 pointer for validity, then dereference it for the syscall number. Then, it
-will proceed to the SYS_EXIT case and examine the single argument. It then
+will proceed to the SYS_CLOSE case and examine the single argument. It then
 calls sys_close(). This function validates the file descriptor passed to it.
-Suppose this check fails. Then, we call exit(-1), which causes thread
+If this check fails, then we call exit(-1), which causes thread
 termination (releasing locks) and process termination (freeing memory and
 closing files).
 
@@ -255,19 +286,34 @@ return the pid returned from process_execute or -1.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+When P waits on C, P calls sema_down() on the semaphore in the exit_status
+struct associated with C. This makes P block until C calls sema_up, which
+happens at the very end of thread_exit(). This way, P cannot return until
+C has exited. If P calls wait after C exits, then the semaphore has a value
+of 1, so sema_down() doesn't block. The child's resources are always freed
+because it won't call sema_up until all resources (locks and files) have
+been freed.
+
+Clearing up C's resources has nothing to do with P, since the exit status
+is stored in a global vector. It cleans itself up in thread_exit().
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
+
 We chose the simpler method of user memory access for ease of debugging
 and maintenance. We centralized our memory checks as much as possible to
-cut down on redundancy and improve code readability. For the functions
-that required extra memory checks, we inserted those checks into the
-calls themselves, since this was unique to those calls and therefore
-made sense to be associated with the call.
+cut down on redundancy and improve code readability. When handling syscalls,
+we centrally check that all the locations on the stack where the arguments
+are passed are valid, and then let each syscall function check that each
+of the arg's values are valid. That is, we do two checks - one before
+dereferencing the stack to get the arg, and one before we dereference the
+arg.
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
+
 By using a dynamic array, we save space inside of the thread struct,
 allowing for more space for the stack. In addition, we have the
 benefit of constant time random access, along with a theoretical
@@ -279,6 +325,7 @@ necessary in order to save space.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
 We maintained the original identity mapping.
 
                            SURVEY QUESTIONS
