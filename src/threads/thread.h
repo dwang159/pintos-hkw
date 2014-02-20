@@ -141,6 +141,8 @@ struct thread {
 struct exit_state {
     tid_t parent;
     int exit_status;
+    bool load_successful;
+    struct semaphore launching;
     // Used for if a parent wants to wait for this child. A semaphore
     // is fine because only one process (the parent) can actually wait
     // for this child.
