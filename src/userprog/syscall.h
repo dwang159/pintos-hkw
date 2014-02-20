@@ -1,9 +1,10 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-#include<stdint.h>
-#include<stdbool.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include "threads/thread.h"
+
 void syscall_init(void);
 
 /* System calls. */
