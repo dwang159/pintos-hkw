@@ -260,6 +260,22 @@ closing files).
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+In our vector of thread_exit_status', we have two relevant fields
+in the struct exit_state: bool load_successful and 
+struct semaphore launching. The system handler sys_exec at syscall.c:197
+first calls process_execute on the cmd_line that is passed to it.
+However, process_execute is not able to see directly if the
+load works properly, because the call to load is passed off to
+the child thread before the payload begins to run. What process_execute
+does is initialize the semaphore named "launching" to 0. When
+load completes, the exit_state's load_successful field is set
+to true if the program is loaded correctly and false otherwise.
+the child process then raises the semaphore "launching", and 
+either continues with the payload or quits if appropriate. Meanwhile,
+the syscall handler is waiting is sys_exec because it is waiting
+to lower the "launching" semaphore. Once it can lower it, it knows
+that the load_succesful field is appropriately set and can either
+return the pid returned from process_execute or -1.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
