@@ -12,12 +12,12 @@ Tim Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment:
+>> Specify how many late tokens you are using on this assignment: 0
 
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL: https://github.com/dkong1796/pintos-hkw.git
-   commit ...
+   commit 0f3872
 
 ---- PRELIMINARIES ----
 
@@ -260,6 +260,7 @@ closing files).
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
 In our vector of thread_exit_status', we have two relevant fields
 in the struct exit_state: bool load_successful and 
 struct semaphore launching. The system handler sys_exec at syscall.c:197
