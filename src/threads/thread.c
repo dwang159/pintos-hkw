@@ -12,6 +12,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#include "threads/malloc.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -57,6 +59,13 @@ static long long user_ticks;    /*!< # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /*!< # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
+
+// Keeps track of threads' exit statuses.
+bool thread_exit_status_initialized;
+struct vector thread_exit_status;
+
+// Filesystem lock
+struct lock filesys_lock;
 
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
@@ -105,6 +114,9 @@ void thread_init(void) {
     lock_init(&tid_lock);
     list_init(&all_list);
     list_init(&sleep_list);
+
+    thread_exit_status_initialized = false;
+    lock_init(&filesys_lock);
 
     /* Initialize each list in ready_lists. */
     for (i = PRI_MIN; i <= PRI_MAX; i++) {
@@ -234,10 +246,31 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     /* Initialize thread. */
     init_thread(t, name, priority);
     t->nice = thread_get_nice(); /* Nice of child is same as parent */
-    t->recent_cpu = thread_current()->recent_cpu;
-    if (thread_mlfqs) /* 4.4 BSD Scheduler */
+
+    if (thread_mlfqs) { /* 4.4 BSD Scheduler */
+        t->recent_cpu = thread_current()->recent_cpu;
         update_priority(t, NULL);
+    }
+
     tid = t->tid = allocate_tid();
+
+    // We can't initialize this in thread_init, so we do it here.
+    if (!thread_exit_status_initialized) {
+        vector_init(&thread_exit_status);
+        // Fill it with zeros up to the current tid.
+        vector_zeros(&thread_exit_status, tid);
+        thread_exit_status_initialized = true;
+    }
+
+    // Add this thread to the exit status list. The thread is indexed
+    // by its tid, so vector[tid] should access the struct for this thread.
+    // Since tid is incremental, we can simply append to do this.
+    struct exit_state *es;
+    es = (struct exit_state *) malloc(sizeof(struct exit_state));
+    ASSERT(es);
+    es->parent = thread_current()->tid;
+    sema_init(&es->waiting, 0);
+    vector_append(&thread_exit_status, es);
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
@@ -381,10 +414,27 @@ void thread_exit(void) {
     process_exit();
 #endif
 
+    /* Release all held locks */
+    struct list_elem *e;
+    struct list *lock_list = &thread_current()->locks_held;
+
+    for (e = list_begin(lock_list); e != list_end(lock_list);
+            e = list_next(e)) {
+        lock_release(list_entry(e, struct lock, elem));
+    }
+
     /* Remove thread from all threads list, set our status to dying,
        and schedule another process.  That process will destroy us
        when it calls thread_schedule_tail(). */
     intr_disable();
+
+    // Wake up the parent if it was waiting on this thread. This indicates
+    // that this thread has exited. We do this inside the interrupt
+    // disabled section so that the parent can't preempt the thread before
+    // it completely finishes exiting.
+    struct exit_state *es = thread_exit_status.data[thread_current()->tid];
+    sema_up(&es->waiting);
+
     list_remove(&thread_current()->allelem);
     thread_current()->status = THREAD_DYING;
     schedule();

@@ -8,8 +8,10 @@
 
 #include <debug.h>
 #include <list.h>
+#include <vector.h>
 #include <stdint.h>
 #include "fixed-point.h"
+#include "synch.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -23,6 +25,7 @@ enum thread_status {
 /*! Thread identifier type.
     You can redefine this to whatever type you like. */
 typedef int tid_t;
+typedef int pid_t;
 #define TID_ERROR ((tid_t) -1)          /*!< Error value for tid_t. */
 
 /* Thread priorities. */
@@ -91,12 +94,13 @@ typedef int tid_t;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list.
 */
+#define THREAD_NAME_LEN 16
 struct thread {
     /*! Owned by thread.c. */
     /**@{*/
     tid_t tid;                    /* Thread identifier. */
     enum thread_status status;    /* Thread state. */
-    char name[16];                /* Name (for debugging purposes). */
+    char name[THREAD_NAME_LEN];   /* Name (for debugging purposes). */
     uint8_t *stack;               /* Saved stack pointer. */
     int base_priority;            /* Base priority level. */
     int priority;                 /* Current priority level. */
@@ -121,6 +125,9 @@ struct thread {
     /**@{*/
 #endif
 
+    // File descriptor table.
+    struct vector files;
+
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
 
@@ -129,6 +136,21 @@ struct thread {
     unsigned magic;                     /* Detects stack overflow. */
     /**@}*/
 };
+
+// We use a vector to keep track of all threads' exit statuses.
+struct exit_state {
+    tid_t parent;
+    int exit_status;
+    bool load_successful;
+    struct semaphore launching;
+    // Used for if a parent wants to wait for this child. A semaphore
+    // is fine because only one process (the parent) can actually wait
+    // for this child.
+    struct semaphore waiting;
+};
+
+extern struct vector thread_exit_status;
+extern struct lock filesys_lock;
 
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
