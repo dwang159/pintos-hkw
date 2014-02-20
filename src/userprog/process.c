@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -58,6 +59,11 @@ static void start_process(void *file_name_) {
     void *stack;
     void *tmp;
     struct thread *curr = thread_current();
+
+    if (!mem_valid(file_name))
+    {
+        sys_exit(-1);
+    }
 
     // Set up the args and mems arrays.
     //TODO ensure no overflow of stack page
@@ -211,13 +217,12 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
-    /* TODO close open files 
     unsigned int i;
-    for (i = 0; i < curr->files.size; i++)
+    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++)
     {
         if (curr->files.data[i] != NULL)
             sys_close(i);
-    }*/
+    }
     vector_destruct(&curr->files);
 }
 
