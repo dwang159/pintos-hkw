@@ -427,6 +427,14 @@ void thread_exit(void) {
        and schedule another process.  That process will destroy us
        when it calls thread_schedule_tail(). */
     intr_disable();
+
+    // Wake up the parent if it was waiting on this thread. This indicates
+    // that this thread has exited. We do this inside the interrupt
+    // disabled section so that the parent can't preempt the thread before
+    // it completely finishes exiting.
+    struct exit_state *es = thread_exit_status.data[thread_current()->tid];
+    sema_up(&es->waiting);
+
     list_remove(&thread_current()->allelem);
     thread_current()->status = THREAD_DYING;
     schedule();
