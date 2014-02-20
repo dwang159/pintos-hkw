@@ -124,9 +124,6 @@ static void start_process(void *file_name_) {
         memcpy(stack, &mems[i], sizeof(void *));
     }
 
-    // We don't need mems any more.
-    free(mems);
-
     // Stack now points to argv[0]. We push this location as argv.
     tmp = stack;
     stack -= sizeof(char **);
@@ -146,6 +143,17 @@ static void start_process(void *file_name_) {
     // Set up the file descriptor table.
     vector_init(&curr->files);
     vector_zeros(&curr->files, STDOUT_FILENO + 1);
+
+    // Deny writes to the currently executing file. We do this
+    // by opening the executing file, calling file_deny_write, and
+    // then not closing the file so that there is always at least one
+    // instance of the file open. It will be closed when the process
+    // exits. We pass sys_open argv[0], which exists in user memory.
+    int fd = sys_open(mems[0]);
+    file_deny_write(curr->files.data[fd]);
+
+    // We don't need mems any more.
+    free(mems);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
