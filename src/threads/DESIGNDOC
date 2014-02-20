@@ -18,8 +18,7 @@ Daniel Wang <dwang@caltech.edu>
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL: http://github.com/dkong1796/pintos_hkw.git
-   commit: tagged project3 in threads
-           8f9804e16a506c45fdefa1c441969b95b907904d
+   commit: tagged project3-2
 
 ---- PRELIMINARIES ----
 
@@ -360,12 +359,12 @@ donated to this thread.
 Suppose we are in the process of finding the highest priority ready thread,
 and are in the middle of the ready queue. If we are then interrupted by
 a process that adds a new highest-priority thread to the queue, we will not
-choose it to run, since we have already passed that part of the ready queue. 
-Thus, while reading the ready queue, we need to turn off interrupts to ensure 
-that only one process can handle that shared data at a time. Otherwise, we 
+choose it to run, since we have already passed that part of the ready queue.
+Thus, while reading the ready queue, we need to turn off interrupts to ensure
+that only one process can handle that shared data at a time. Otherwise, we
 risk choosing the incorrect thread to run.
 
-No. Suppose we lock the ready queue, but then the timer interrupt fires. 
+No. Suppose we lock the ready queue, but then the timer interrupt fires.
 Then, the timer interrupt will be unable to access the ready queue to add
 waking threads back to the ready queue. Because we are in an interrupt
 context, we cannot yield and wait for the lock to be released. Thus, locking
@@ -427,14 +426,14 @@ ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
  0      0   0   0  63  61  59     A
  4      4   0   0  62  61  59     A
- 8      8   0   0  61  61  59     B  
+ 8      8   0   0  61  61  59     B
 12      8   4   0  61  60  59     A
 16     12   4   0  60  60  59     B
 20     12   8   0  60  59  59     A
 24     12   8   0  59  59  59     C
-28     16   8   4  59  59  58     B 
-32     16   8   4  59  58  58     A 
-36     16  12   8  58  58  58     C 
+28     16   8   4  59  59  58     B
+32     16   8   4  59  58  58     A
+36     16  12   8  58  58  58     C
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
@@ -448,11 +447,11 @@ test. So we might fiddle with this.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
-The code inside the interrupt context corresponds to 
+The code inside the interrupt context corresponds to
 a) updating the running threads recent_cpu every tick
 b) updating the running thread's priority and potentially yielding
     every 4 ticks
-c) updating every thread's priority & recent_cpu 
+c) updating every thread's priority & recent_cpu
     and the system's load_avg every 100 ticks
 
 a) and b) don't take very much time, and c) takes time proportional
@@ -461,7 +460,7 @@ enough to run smoothly.
 
 But still, because there is so much going on in the interrupt context
 it will probably slow things down. There isn't really much of a
-division between inside and outside: the scheduler variables 
+division between inside and outside: the scheduler variables
 are mostly updated inside interrupt context, and the decision to
 yield is made there a lot of the time as well.
 
@@ -495,12 +494,12 @@ yield is made there a lot of the time as well.
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
-We implemented it with macros over functions for two reasons: 
-    a) speed and 
+We implemented it with macros over functions for two reasons:
+    a) speed and
     b) There wasn't a lot of state we had to worry about changing
        because in the macros only numbers and arithmetic was involved.
 The usefulness of macros as an abstraction layer allowed us to make a lot of
-mistakes in our fixed point implementation that gave us one location 
+mistakes in our fixed point implementation that gave us one location
 to correct as well as making clear the intent of the operation in the
 update routines for the scheduler related values.
 
@@ -515,7 +514,7 @@ website.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
-The advanced scheduler was really hard and it took a lot of 
+The advanced scheduler was really hard and it took a lot of
 time. Bugs were difficult to find.
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
@@ -524,8 +523,8 @@ time. Bugs were difficult to find.
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 "[Priority]  is also recalculated once every fourth clock tick, for every
-thread" in doc/pintos_9.html in section B.2 
-doesn't make any sense. There isn't anything to recalculate for every 
+thread" in doc/pintos_9.html in section B.2
+doesn't make any sense. There isn't anything to recalculate for every
 thread, only for the running thread.
 
 >> Do you have any suggestions for the TAs to more effectively assist
