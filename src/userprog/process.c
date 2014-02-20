@@ -25,8 +25,8 @@ static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
 /*! Starts a new thread running a user program loaded from FILENAME.
- *  The new thread may be scheduled (and may even exit) before 
- *  process_execute() returns.  Returns the new process's thread id, 
+ *  The new thread may be scheduled (and may even exit) before
+ *  process_execute() returns.  Returns the new process's thread id,
  *  or TID_ERROR if the thread cannot be created. */
 tid_t process_execute(const char *file_name) {
     char *fn_copy;
@@ -61,11 +61,6 @@ static void start_process(void *file_name_) {
     void *stack;
     void *tmp;
     struct thread *curr = thread_current();
-
-    if (!mem_valid(file_name))
-    {
-        sys_exit(-1);
-    }
 
     // Set up the args and mems arrays.
     //TODO ensure no overflow of stack page
