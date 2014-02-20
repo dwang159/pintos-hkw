@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include <vector.h>
+#define PAGE_SIZE 4096
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -63,7 +64,6 @@ static void start_process(void *file_name_) {
     struct thread *curr = thread_current();
 
     // Set up the args and mems arrays.
-    //TODO ensure no overflow of stack page
     maxlen = strlen(file_name);
     args = (char **)malloc(maxlen * sizeof(char *));
     mems = (void **)malloc(maxlen * sizeof(void *));
@@ -75,6 +75,11 @@ static void start_process(void *file_name_) {
         if (token == NULL)
             break;
         args[arglen] = token;
+    }
+    // Ensure arguments don't overflow stack page
+    if (maxlen + sizeof(void *) * (arglen + 1) + 2 * sizeof(int) > PAGE_SIZE)
+    {
+        sys_exit(-1);
     }
 
     // Correct the process's name.

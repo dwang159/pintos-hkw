@@ -50,10 +50,11 @@ use the pointer to esp to push each token onto the stack. When we do
 this, we put the pointer to each arg in an array, and place a NULL at the end
 of the array. Then, we word-align the stack and iterate through the array
 of memory addresses backwards, ensuring that our arguments are push in
-the correct order. We then push a pointer to the first argument (argv),
-argc and a dummy return value.
-
-To avoid overflowing the stack page, we TODO @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+the correct order. We then push argc and a dummy return value.
+To avoid overflowing the stack page, we check to ensure that the length
+of the arguments plus the length of the argument pointers plus the
+additional things pushed onto the stack (argc, NULL, dummy return, word-
+align) does not exceed page size. If it does, we terminate the process.
 
 ---- RATIONALE ----
 
@@ -68,7 +69,15 @@ will be safer and more correct than strtok.
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
 
-TODO @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+If the shell does this, we can cut out unnecessary code from the kernel,
+making it easier to maintain and closer to the microkernel ideal. This
+improves the scalability of the kernel without trading too much in
+performance.
+In addition, if we keep the argument parsing in user space, we don't need
+to worry so much about checking invalid memory, since this is already done
+by the kernel. Since we're in user space, we handle this through segfaults
+and existing syscall code. This cuts down on the amount of error-checking
+code that needs to be written, improving code readability.
 
                              SYSTEM CALLS
                              ============
@@ -252,6 +261,7 @@ necessary in order to save space.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+We maintained the original identity mapping.
 
                            SURVEY QUESTIONS
                            ================
