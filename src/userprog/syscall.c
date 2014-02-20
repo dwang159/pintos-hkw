@@ -183,11 +183,11 @@ void sys_exit(int status) {
     // Print exit message.
     printf("%s: exit(%d)\n", t->name, status);
 
+    // Set exit status.
     struct exit_state *es = thread_exit_status.data[t->tid];
     es->exit_status = status;
-    // Wake up parent if it was waiting on child. This also indicates
-    // that the thread has exited.
-    sema_up(&es->waiting);
+
+    // Do the rest of the exit process.
     thread_exit();
 }
 
