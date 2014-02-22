@@ -5,9 +5,11 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 
+typedef int mapid_t;
+
 void syscall_init(void);
 
-/* System calls. */
+/* Project 4 System Calls. */
 void sys_halt(void);
 void sys_exit(int status);
 pid_t sys_exec(const char *cmd_line);
@@ -21,6 +23,10 @@ int sys_write(int fd, const void *buffer, unsigned size);
 void sys_seek(int fd, unsigned int position);
 unsigned int sys_tell(int fd);
 void sys_close(int fd);
+
+/* Project 5 System Calls. */
+mapid_t sys_mmap(int fd, void *addr);
+void sys_munmap(mapid_t mapping);
 
 /* Checks if memory address is valid. */
 bool mem_valid(const void *addr);

@@ -141,6 +141,20 @@ static void syscall_handler(struct intr_frame *f) {
         else
             args_valid = false;
         break;
+    case SYS_MMAP:
+        if (check_args_2(args, int, void*)) {
+            off1 = sizeof(int);
+            f->eax = sys_mmap(*((int *) args),
+                              *((void **) (args + off1)));
+        } else
+            args_valid = false;
+        break;
+    case SYS_MUNMAP:
+        if (check_args_1(args, mapid_t))
+            sys_munmap(*((mapid_t *) args));
+        else
+            args_valid = false;
+        break;
     default:
         args_valid = false;
         break;
@@ -169,6 +183,8 @@ bool fd_valid(int fd) {
         }
     return true;
 }
+
+/** Project 4 Handlers */
 
 /* Terminates Pintos. */
 void sys_halt() {
@@ -356,4 +372,20 @@ void sys_close(int fd)
     file_close(curr->files.data[fd]);
     lock_release(&filesys_lock);
     curr->files.data[fd] = NULL;
+}
+
+/** Project 5 handlers */
+/* Maps a file specified by fd into consecutive
+ * virtual pages starting at addr */
+
+mapid_t sys_mmap(int fd, void *addr) {
+    printf("Mmap called on %d at %p\n", fd, addr);
+    printf("However, it's unimplemented.\n");
+    return -1;
+}
+
+/* Unmaps the mapping */
+void sys_munmap(mapid_t mapping) {
+    printf("Munmap called with %d as arg\n", mapping);
+    printf("However, it's unimplemented.\n");
 }
