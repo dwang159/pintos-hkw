@@ -1,5 +1,6 @@
-#ifndef SWAP_H
-#define SWAP_H
+#ifndef VM_SWAP_H
+#define VM_SWAP_H
+
 #include "threads/thread.h"
 
 typedef size_t slotid_t;
@@ -10,4 +11,4 @@ void swap_free_and_read(void *buf, slotid_t to_read);
 void swap_free_several(slotid_t *to_free);
 slotid_t swap_swalloc_and_write(void *buf);
 
-#endif /* SWAP_H */
+#endif /* VM_SWAP_H */
