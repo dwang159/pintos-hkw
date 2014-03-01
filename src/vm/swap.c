@@ -24,9 +24,11 @@ static block_sector_t slot_to_sect(slotid_t slot) {
  * TODO: pin it to keep it in memory. */
 void swap_table_init() {
     swap_buffer = palloc_get_multiple(PAL_ASSERT, SWAP_NUM_PAGES);
-    /* TODO: Pin swap_buffer's pages in the Frame Table. */
     swap_table = bitmap_create_in_buf(SWAP_NUM_SLOTS, swap_buffer, 0);
     swap_dev = block_get_role(BLOCK_SWAP);
+    bitmap_mark(swap_table, 0); /* The 0 slot should never be given out,
+                                  * for, you know, safety reasons. Null
+                                  * terminated lists, for one reason. */
     lock_init(&swap_table_lock);
 }
 
@@ -51,6 +53,17 @@ void swap_free_and_read(void *vaddr, slotid_t swap_slot) {
         sect += 1;
     }
     bitmap_reset(swap_table, swap_slot);
+    lock_release(&swap_table_lock);
+}
+
+/* Releases a list of swap slots without writing them back. */
+void swap_free_several(void *vaddr, slotid_t *slot_list) {
+    lock_acquire(&swap_table_lock);
+    int i;
+    for (i = 0; slot_list[i]; i++) {
+        ASSERT(bitmap_test(swap_table, slot_list[i]);
+        bitmap_reset(swap_table, swap_slot);
+    }
     lock_release(&swap_table_lock);
 }
 
