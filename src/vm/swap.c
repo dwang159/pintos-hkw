@@ -21,8 +21,7 @@ static block_sector_t slot_to_sect(slotid_t slot) {
     return (block_sector_t) slot;
 }
 
-/* Allocate space for the swap table, and 
- * TODO: pin it to keep it in memory. */
+/* Allocate space for the swap table and initialize it. */
 void swap_table_init() {
     swap_buffer = palloc_get_multiple(PAL_ASSERT, SWAP_NUM_PAGES);
     swap_table = bitmap_create_in_buf(SWAP_NUM_SLOTS, swap_buffer, 0);
