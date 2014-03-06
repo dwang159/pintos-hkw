@@ -1,5 +1,6 @@
 #include "swap.h"
 #include <stdio.h>
+#include <debug.h>
 #include "devices/block.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
@@ -57,11 +58,13 @@ void swap_free_and_read(void *vaddr, slotid_t swap_slot) {
 }
 
 /* Releases a list of swap slots without writing them back. */
-void swap_free_several(void *vaddr, slotid_t *slot_list) {
+void swap_free_several(slotid_t *slot_list) {
     lock_acquire(&swap_table_lock);
     int i;
+    slotid_t swap_slot;
     for (i = 0; slot_list[i]; i++) {
-        ASSERT(bitmap_test(swap_table, slot_list[i]);
+        swap_slot = slot_list[i];
+        ASSERT(bitmap_test(swap_table, slot_list[i]));
         bitmap_reset(swap_table, swap_slot);
     }
     lock_release(&swap_table_lock);
