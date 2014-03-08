@@ -9,19 +9,27 @@
 
 #include <hash.h>
 
+enum spt_page_type {
+    SPT_ZERO,
+    SPT_FILESYS,
+    SPT_SWAP
+};
+
 /* Data structure for a supplemental page table. */
 struct spt_table {
-  struct hash data;
+    struct hash data;
 };
 
 /* Data structure for a supplemental page table entry. */
 struct spt_entry {
-  // Element used to store entry in page table.
-  struct hash_elem elem;
+    // Element used to store entry in page table.
+    struct hash_elem elem;
 
-  // Key used to identify page. Should be the uaddr of the page with
-  // the lower 12 bits zeroed out.
-  unsigned key;
+    // Key used to identify page. Should be the uaddr of the page with
+    // the lower 12 bits zeroed out.
+    unsigned key;
+
+    // TODO
 };
 
 /* Create a new page table. */
