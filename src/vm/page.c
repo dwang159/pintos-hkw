@@ -16,7 +16,7 @@ struct spt_table *spt_create_table() {
     struct spt_table *spt;
 
     spt = (struct spt_table *) malloc(sizeof(struct spt_table));
-    if (!spt || !hash_init(&spt->data, &spt_hash, &spt_entry_cmp, NULL))
+    if (!spt || !hash_init(&spt->data, &spt_hash, &spt_hash_less_func, NULL))
         return NULL;
     return spt;
 }
@@ -45,16 +45,16 @@ struct spt_entry *spt_lookup(struct spt_table *spt, void *uaddr) {
     cmp = spt_create_entry(spt_get_key(uaddr));
     if (!cmp)
         return NULL;
-    e = hash_find(spt, &cmp->elem);
+    e = hash_find(&spt->data, &cmp->elem);
     free(cmp);
 
     return hash_entry(e, struct spt_entry, elem);
 }
 
 /* Hashes a pointer. */
-unsigned spt_hash(hash_elem *e, void *aux UNUSED) {
+unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
     struct spt_entry *spte = hash_entry(e, struct spt_entry, elem);
-    return hash_int((int) spt_get_key(spte->page_uaddr));
+    return hash_int((int) spte->key);
 }
 
 /* Returns an a key for the hash table given a user address.
@@ -62,11 +62,14 @@ unsigned spt_hash(hash_elem *e, void *aux UNUSED) {
  * the page, with all other bits zeroed out.
  */
 unsigned spt_get_key(void *uaddr) {
-    return uaddr & (PDMASK | PTMASK);
+    return ((unsigned) uaddr) & (PDMASK | PTMASK);
 }
 
 /* Compares two hash elems. Returns true if e1 < e2. */
-bool spt_entry_cmp(struct spt_entry *e1, struct spt_entry *e2, void *aux) {
+bool spt_hash_less_func(
+        const struct hash_elem *e1,
+        const struct hash_elem *e2,
+        void *aux UNUSED) {
     struct spt_entry *spte1, *spte2;
 
     spte1 = hash_entry(e1, struct spt_entry, elem);

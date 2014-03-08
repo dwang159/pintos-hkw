@@ -28,7 +28,7 @@ struct spt_entry {
 struct spt_table *spt_create_table(void);
 
 /* Create a new page table entry. */
-struct spt_entry *spt_create_entry(void *uaddr);
+struct spt_entry *spt_create_entry(unsigned key);
 
 /* Look up a page table entry. */
 struct spt_entry *spt_lookup(struct spt_table *spt, void *uaddr);
@@ -37,9 +37,12 @@ struct spt_entry *spt_lookup(struct spt_table *spt, void *uaddr);
 unsigned spt_get_key(void *uaddr);
 
 /* Returns true if e1 < e2. */
-bool spt_entry_cmp(struct spt_entry *e1, struct spt_entry *e2, void *aux);
+bool spt_hash_less_func(
+    const struct hash_elem *e1,
+    const struct hash_elem *e2,
+    void *aux);
 
 /* Hash function for the supplemental page table. */
-unsigned spt_hash(hash_elem *e, void *aux);
+unsigned spt_hash(const struct hash_elem *e, void *aux);
 
 #endif /* VM_PAGE_H */
