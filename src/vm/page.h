@@ -9,6 +9,8 @@
 
 #include <hash.h>
 
+// Page types. Can be a page of zeros, a page to be read from the
+// filesystem, or a page to be read from swap.
 enum spt_page_type {
     SPT_ZERO,
     SPT_FILESYS,
@@ -29,7 +31,12 @@ struct spt_entry {
     // the lower 12 bits zeroed out.
     unsigned key;
 
-    // TODO
+    // Page type.
+    enum spt_page_type type;
+
+    // Additional data about the page, depending on the page type.
+    union {
+    } data;
 };
 
 /* Create a new page table. */
@@ -39,7 +46,10 @@ struct spt_table *spt_create_table(void);
 struct spt_entry *spt_create_entry(unsigned key);
 
 /* Look up a page table entry. */
-struct spt_entry *spt_lookup(struct spt_table *spt, void *uaddr);
+struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key);
+
+/* Remove an entry from the page table. */
+void spt_remove(struct spt_table *spt, unsigned key);
 
 /* Returns a key to look up an entry in the hash table given a uaddr. */
 unsigned spt_get_key(void *uaddr);

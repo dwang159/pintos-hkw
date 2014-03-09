@@ -36,19 +36,28 @@ struct spt_entry *spt_create_entry(unsigned key) {
 }
 
 /* Look up a page table entry. */
-struct spt_entry *spt_lookup(struct spt_table *spt, void *uaddr) {
+struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key) {
     struct hash_elem *e;
     struct spt_entry *cmp;
 
     // Create a temporary struct with the same key so we can find
     // an "equal" element in the hash table.
-    cmp = spt_create_entry(spt_get_key(uaddr));
-    if (!cmp)
-        return NULL;
+    cmp = spt_create_entry(key);
+    ASSERT(cmp);
     e = hash_find(&spt->data, &cmp->elem);
     free(cmp);
 
     return hash_entry(e, struct spt_entry, elem);
+}
+
+/* Removes an entry from the page table. */
+void spt_remove(struct spt_table *spt, unsigned key) {
+    struct spt_entry *cmp;
+
+    cmp = spt_create_entry(key);
+    ASSERT(cmp);
+    hash_delete(&spt->data, &cmp->elem);
+    free(cmp);
 }
 
 /* Hashes a pointer. */
