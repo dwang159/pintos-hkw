@@ -46,14 +46,9 @@ pageinfo *frame_table_lookup(uint32_t frame_no);
 void frame_table_set_flags(uint32_t frame_no, uint32_t flags);
 uint32_t frame_table_get_flags(uint32_t frame_no);
 
-/* Evicts the frame decided by the policy pol, and returns that
- * frame number. Needs to clear the entry in the frame table,
- * the page table, move the contents into swap or write it back to
- * the file that it belongs to. */
-uint32_t frame_evict(policy_t pol);
-
-/* Frees all frames associated with the exiting process. */
+uint32_t frame_evict(policy_t pol, uint32_t pte);
 void frame_free_all(void);
+void frame_writeback(struct frame *);
 
 /* Adds or removes a page to the array associated with that frame in
  * the frame table. */

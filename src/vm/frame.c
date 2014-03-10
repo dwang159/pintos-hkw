@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 typedef uint32_t flags_t;
+static int ft_num_free = NUM_FRAMES;
 
 hash_hash_func frame_hash;
 hash_less_func frame_less;
@@ -97,15 +98,58 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
  * frame number. Needs to clear the entry in the frame table,
  * the page table, move the contents into swap or write it back to
  * the file that it belongs to. */
-uint32_t frame_evict(policy_t pol) {
- //   struct frame *vic = pol(); 
-    printf("frame_evict called with policy %p\n", pol);
-    printf("But not implemented...\n");
-    return -1;
+uint32_t frame_evict(policy_t pol, uint32_t pte) {
+    struct frame *fp;
+    lock_acquire(&ft_lock);
+    if (ft_num_free > 0) {
+        struct hash_iterator i;
+        hash_first(&i, &ft_hash);
+        while (hash_next(&i)) {
+            fp = hash_entry(hash_cur(&i), struct frame, hash_elem);
+            if (fp->ptes[0].pte == 0) {
+                ft_num_free--;
+                break;
+            }
+        }
+        PANIC("Loop should have ended. Internal structure error.\n");
+    } else {
+        fp = pol();
+        if (fp->dirty) {
+            frame_writeback(fp);
+        }
+    }
+    fp->ptes[0].pte = pte;
+    fp->ptes[0].owner = thread_tid();
+    fp->dirty = false;
+    uint32_t frame_no = fp->frame_no;
+    lock_release(&ft_lock);
+    return frame_no;
 }
 
+/* Frees all frames associated with the exiting process. */
+void frame_free_all(void) {
+    tid_t curr = thread_tid();
+    struct hash_iterator i;
+    hash_first(&i, &ft_hash);
+    while (hash_next(&i)) {
+        struct frame *fp = hash_entry(hash_cur(&i), 
+                                      struct frame, 
+                                      hash_elem);
+        if (fp->ptes[0].owner == curr) {
+            frame_writeback(fp);
+            fp->ptes[0].pte = 0;
+            ft_num_free++;
+        }
+    }
+}
+
+/* Writes the frame back to the swap partition or to a file. */
+void frame_writeback(struct frame *fp) {
+    printf("Writeback not implemented. Called on frame no %u\n",
+            fp->frame_no);
+}
 /* Eviction policies. */
-struct frame *random_frame() {
+struct frame *random_frame(void) {
     random_init((unsigned) timer_ticks());
     uint32_t num;
     num = (uint32_t) random_ulong() % NUM_FRAMES;
@@ -115,9 +159,8 @@ struct frame *random_frame() {
     return find_frame(num);
 }
 
-struct frame *lru_frame() {
+struct frame *lru_frame(void) {
     /* This might be nonsensical. */
-    lock_acquire(&ft_lock);
     struct list_elem *e;
     for(e = list_begin(&ft_list); 
           e != list_end(&ft_list);
@@ -144,6 +187,5 @@ struct frame *lru_frame() {
         lock_release(&ft_lock);
         return f;
     }
-    lock_release(&ft_lock);
     return NULL;
 }
