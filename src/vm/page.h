@@ -8,6 +8,7 @@
  */
 
 #include <hash.h>
+#include "vm/swap.h"
 
 // Page types. Can be a page of zeros, a page to be read from the
 // filesystem, or a page to be read from swap.
@@ -37,7 +38,7 @@ struct spt_entry {
 
     // Additional data about the page, depending on the page type.
     union {
-        slotid_t slot; // Used if associated with swap.
+        size_t slot; // Used if associated with swap.
     } data;
 };
 

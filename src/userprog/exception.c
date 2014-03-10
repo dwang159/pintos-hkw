@@ -155,6 +155,8 @@ static void page_fault(struct intr_frame *f) {
     } else {
         // Load the page. The behavior depends on the page type.
         switch (spte->type) {
+        case SPT_INVALID:
+            sys_exit(-1);
         case SPT_ZERO:
             break;
         case SPT_FILESYS:
