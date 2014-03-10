@@ -46,7 +46,7 @@ pageinfo *frame_table_lookup(uint32_t frame_no) {
     struct frame *fp;
     fp = find_frame(frame_no);
     if (fp != NULL) {
-        return fp->ptes;
+        return fp->pages;
     } else {
         return NULL; 
     }
@@ -64,22 +64,41 @@ struct frame *find_frame(uint32_t frame_no) {
         lock_release(&ft_lock);
         return fp;
     } else {
+        lock_release(&ft_lock);
         return NULL;
     }
 }
 
 /* Adds or removes a page to the array associated with that frame in
  * the frame table. */
-void frame_table_add_vpage(uint32_t frame_no, uint32_t page_no) {
-    printf("Attempted to add page %u from frame %u\n", page_no,
-                                                          frame_no);
-    printf("Error: not implemented\n");
+void frame_table_add_vpage(uint32_t frame_no, uint32_t pte) {
+    lock_acquire(&ft_lock);
+    struct frame *fp = find_frame(frame_no);
+    bool found = false;
+    int i;
+    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
+        if (fp->pages[i].pte != 0)
+            continue;
+        else {
+            fp->pages[i].pte = pte;
+            fp->pages[i].owner = thread_tid();
+            found = true;
+            break;
+        }
+    }
+    lock_release(&ft_lock);
+    ASSERT(found);
 }
 
-void frame_table_rem_vpage(uint32_t frame_no, uint32_t page_no) {
-    printf("Attempted to remove page %u from frame %u\n", page_no,
-                                                          frame_no);
-    printf("Error: not implemented\n");
+void frame_table_rem_vpage(uint32_t frame_no, uint32_t pte) {
+    struct frame *fp = find_frame(frame_no);
+    int i;
+    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
+        if (fp->pages[i].pte == pte) {
+            fp->pages[i].pte = 0;
+            return;
+        }
+    }
 }
 
 void frame_table_set_flags(uint32_t frame_no, flags_t flags) {
@@ -106,7 +125,7 @@ uint32_t frame_evict(policy_t pol, uint32_t pte) {
         hash_first(&i, &ft_hash);
         while (hash_next(&i)) {
             fp = hash_entry(hash_cur(&i), struct frame, hash_elem);
-            if (fp->ptes[0].pte == 0) {
+            if (fp->pages[0].pte == 0) {
                 ft_num_free--;
                 break;
             }
@@ -118,8 +137,8 @@ uint32_t frame_evict(policy_t pol, uint32_t pte) {
             frame_writeback(fp);
         }
     }
-    fp->ptes[0].pte = pte;
-    fp->ptes[0].owner = thread_tid();
+    fp->pages[0].pte = pte;
+    fp->pages[0].owner = thread_tid();
     fp->dirty = false;
     uint32_t frame_no = fp->frame_no;
     lock_release(&ft_lock);
@@ -135,9 +154,9 @@ void frame_free_all(void) {
         struct frame *fp = hash_entry(hash_cur(&i), 
                                       struct frame, 
                                       hash_elem);
-        if (fp->ptes[0].owner == curr) {
+        if (fp->pages[0].owner == curr) {
             frame_writeback(fp);
-            fp->ptes[0].pte = 0;
+            fp->pages[0].pte = 0;
             ft_num_free++;
         }
     }
@@ -166,7 +185,7 @@ struct frame *lru_frame(void) {
           e != list_end(&ft_list);
           e = list_next(e)) {
         struct frame *f = list_entry(e, struct frame, list_elem);
-        pageinfo *pages_for_f =  f->ptes;
+        pageinfo *pages_for_f = f->pages;
         /* Iterate through the pages that map to the frame f,
          * and say that the frame is dirty if any page is
          * and accessed if any page is. */

@@ -27,7 +27,7 @@ struct frame {
     struct list_elem list_elem;
     uint32_t frame_no;
     bool dirty;
-    pageinfo ptes[PAGE_FRAME_RATIO];
+    pageinfo pages[PAGE_FRAME_RATIO];
 };
 
 struct list ft_list;

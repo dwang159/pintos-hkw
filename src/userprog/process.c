@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "vm/page.h"
 #include <vector.h>
 #define PAGE_SIZE 4096
 
