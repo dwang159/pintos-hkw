@@ -324,9 +324,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
                          bool writable);
 
-/*! Loads an ELF executable from FILE_NAME into the current thread.  Stores the
-    executable's entry point into *EIP and its initial stack pointer into *ESP.
-    Returns true if successful, false otherwise. */
+/*! Loads an ELF executable from FILE_NAME into the current thread.  
+ *  Stores the executable's entry point into *EIP and its initial 
+ *  stack pointer into *ESP.
+ *  Returns true if successful, false otherwise. */
 bool load(const char *file_name, void (**eip) (void), void **esp) {
     struct thread *t = thread_current();
     struct Elf32_Ehdr ehdr;

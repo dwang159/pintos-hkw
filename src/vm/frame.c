@@ -98,6 +98,7 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
  * the page table, move the contents into swap or write it back to
  * the file that it belongs to. */
 uint32_t frame_evict(policy_t pol) {
+ //   struct frame *vic = pol(); 
     printf("frame_evict called with policy %p\n", pol);
     printf("But not implemented...\n");
     return -1;
@@ -115,6 +116,7 @@ struct frame *random_frame() {
 }
 
 struct frame *lru_frame() {
+    /* This might be nonsensical. */
     lock_acquire(&ft_lock);
     struct list_elem *e;
     for(e = list_begin(&ft_list); 
@@ -131,11 +133,13 @@ struct frame *lru_frame() {
         uint32_t pte;
         for (i = 0; i < PAGE_FRAME_RATIO; i++) {
             pte = pages_for_f[i].pte;
-            accessed = accessed && (pte & PTE_A);
-            dirty = dirty && (pte & PTE_D);
+            pages_for_f[i].pte &= ~PTE_A; /* Turn off the accessed bit. */
+            accessed = accessed || (pte & PTE_A);
+            dirty = dirty || (pte & PTE_D);
         }
-        if (!accessed)
-            continue; /* Don't evict a frame not used yet. */
+        if (accessed) {
+            continue;
+        }
         f->dirty = dirty;
         lock_release(&ft_lock);
         return f;
