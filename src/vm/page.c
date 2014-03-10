@@ -41,23 +41,32 @@ void spt_insert(struct spt_table *spt, struct spt_entry *spte) {
     hash_insert(&spt->data, &spte->elem);
 }
 
-/* Update an entry's data. The provided data pointer should be to
- * whatever is appropriate given the type.
- */
-void spt_update(struct spt_entry *spte, enum spt_page_type type, void *data) {
-    ASSERT(spte && data);
+/* Update an entry to SPT_ZERO. */
+void spt_update_zero(struct spt_entry *spte) {
+    ASSERT(spte);
+    spte->type = SPT_ZERO;
+}
 
-    spte->type = type;
+/* Update an entry to SPT_FILESYS. */
+void spt_update_filesys(struct spt_entry *spte,
+                        struct file *file, off_t offset) {
+    ASSERT(spte && file);
+    spte->type = SPT_FILESYS;
+    spte->data.fdata.file = file;
+    spte->data.fdata.offset = offset;
+}
 
-    // Copy over the appropriate data.
-    switch (spte->type) {
-    case SPT_ZERO:
-        break;
-    case SPT_FILESYS:
-        break;
-    case SPT_SWAP:
-        break;
-    }
+/* Update an entry to SPT_SWAP. */
+void spt_update_swap(struct spt_entry *spte, size_t slot) {
+    ASSERT(spte);
+    spte->type = SPT_SWAP;
+    spte->data.slot = slot;
+}
+
+/* Update an entry to SPT_INVALID (invalidates the page). */
+void spt_invalidate(struct spt_entry *spte) {
+    ASSERT(spte);
+    spte->type = SPT_INVALID;
 }
 
 /* Look up a page table entry. Returns NULL if no entry exists. */

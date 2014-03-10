@@ -8,6 +8,7 @@
  */
 
 #include <hash.h>
+#include "filesys/file.h"
 #include "vm/swap.h"
 
 // Page types. Can be a page of zeros, a page to be read from the
@@ -38,7 +39,14 @@ struct spt_entry {
 
     // Additional data about the page, depending on the page type.
     union {
-        size_t slot; // Used if associated with swap.
+        // Struct to keep information on the location of the
+        // page within the file.
+        struct {
+            struct file *file;
+            off_t offset;
+        } fdata;
+        // Used if associated with swap.
+        size_t slot;
     } data;
 };
 
@@ -51,8 +59,18 @@ struct spt_entry *spt_create_entry(unsigned key);
 /* Insert an entry into the page table. */
 void spt_insert(struct spt_table *spt, struct spt_entry *spte);
 
-/* Update an entry's data. */
-void spt_update(struct spt_entry *spte, enum spt_page_type type, void *data);
+/* Update an entry to SPT_ZERO. */
+void spt_update_zero(struct spt_entry *spte);
+
+/* Update an entry to SPT_FILESYS. */
+void spt_update_filesys(struct spt_entry *spte,
+                        struct file *file, off_t offset);
+
+/* Update an entry to SPT_SWAP. */
+void spt_update_swap(struct spt_entry *spte, size_t slot);
+
+/* Update an entry to SPT_INVALID (invalidates the page). */
+void spt_invalidate(struct spt_entry *spte);
 
 /* Look up a page table entry. */
 struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key);
