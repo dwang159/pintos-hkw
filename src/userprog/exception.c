@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "syscall.h"
+#include "vm/page.h"
 
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
@@ -113,6 +114,9 @@ static void page_fault(struct intr_frame *f) {
     bool user;         /* True: access by user, false: access by kernel. */
     void *fault_addr;  /* Fault address. */
 
+    // Currently executing thread.
+    struct thread *t = thread_current();
+
     /* Obtain faulting address, the virtual address that was accessed to cause
        the fault.  It may point to code or to data.  It is not necessarily the
        address of the instruction that caused the fault (that's f->eip).
@@ -135,10 +139,28 @@ static void page_fault(struct intr_frame *f) {
     /* To implement virtual memory, delete the rest of the function
        body, and replace it with code that brings in the page to
        which fault_addr refers. */
-    printf("Page fault at %p: %s error %s page in %s context.\n",
-           fault_addr,
-           not_present ? "not present" : "rights violation",
-           write ? "writing" : "reading",
-           user ? "user" : "kernel");
-    kill(f);
+
+    // Check if the faulting address is in the supplemental page table.
+    // If not found, then the memory address is invalid and we terminate
+    // the process. If a page is found, then we load the page appropriately
+    // depending on what type is recorded in the page table.
+    struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
+    if (!spte) {
+        printf("Page fault at %p: %s error %s page in %s context.\n",
+                fault_addr,
+                not_present ? "not present" : "rights violation",
+                write ? "writing" : "reading",
+                user ? "user" : "kernel");
+        kill(f);
+    } else {
+        // Load the page. The behavior depends on the page type.
+        switch (spte->type) {
+        case SPT_ZERO:
+            break;
+        case SPT_FILESYS:
+            break;
+        case SPT_SWAP:
+            break;
+        }
+    }
 }

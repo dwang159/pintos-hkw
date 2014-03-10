@@ -35,7 +35,7 @@ struct spt_entry *spt_create_entry(unsigned key) {
     return spte;
 }
 
-/* Look up a page table entry. */
+/* Look up a page table entry. Returns NULL if no entry exists. */
 struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key) {
     struct hash_elem *e;
     struct spt_entry *cmp;
@@ -46,6 +46,9 @@ struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key) {
     ASSERT(cmp);
     e = hash_find(&spt->data, &cmp->elem);
     free(cmp);
+
+    if (!e)
+        return NULL;
 
     return hash_entry(e, struct spt_entry, elem);
 }

@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+#include "vm/page.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -121,7 +122,13 @@ struct thread {
 #ifdef USERPROG
     /*! Owned by userprog/process.c. */
     /**@{*/
-    uint32_t *pagedir;                  /*!< Page directory. */
+
+    // Page directory.
+    uint32_t *pagedir;
+
+    // Supplemental page table.
+    struct spt_table *spt;
+
     /**@{*/
 #endif
 

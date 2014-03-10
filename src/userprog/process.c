@@ -247,6 +247,9 @@ void process_activate(void) {
     /* Activate thread's page tables. */
     pagedir_activate(t->pagedir);
 
+    // Don't need to do anything with the suppelemental page table, since
+    // it is initialized in spt_create_table().
+
     /* Set thread's kernel stack for use in processing interrupts. */
     tss_update();
 }
@@ -332,9 +335,10 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     bool success = false;
     int i;
 
-    /* Allocate and activate page directory. */
+    /* Allocate and activate page directory and supplemental page table. */
     t->pagedir = pagedir_create();
-    if (t->pagedir == NULL)
+    t->spt = spt_create_table();
+    if (t->pagedir == NULL || t->spt == NULL)
         goto done;
     process_activate();
 
