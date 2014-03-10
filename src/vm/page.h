@@ -8,10 +8,12 @@
  */
 
 #include <hash.h>
+#include "vm/swap.h"
 
 // Page types. Can be a page of zeros, a page to be read from the
 // filesystem, or a page to be read from swap.
 enum spt_page_type {
+    SPT_INVALID,
     SPT_ZERO,
     SPT_FILESYS,
     SPT_SWAP
@@ -36,6 +38,7 @@ struct spt_entry {
 
     // Additional data about the page, depending on the page type.
     union {
+        size_t slot; // Used if associated with swap.
     } data;
 };
 

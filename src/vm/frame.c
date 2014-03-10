@@ -1,7 +1,11 @@
 #include "vm/frame.h"
+#include "vm/page.h"
 #include <devices/timer.h>
 #include <lib/random.h>
 #include "threads/pte.h"
+#include "threads/malloc.h"
+#include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -39,6 +43,15 @@ void frame_table_destroy() {
     lock_acquire(&ft_lock);
     /* TODO: Be a bit more careful about freeing resources? */
     hash_destroy(&ft_hash, NULL);
+}
+
+struct frame *frame_create_entry(uint32_t frame_no) {
+    struct frame *fp;
+    fp = (struct frame *) malloc(sizeof(struct spt_entry));
+    if (!fp)
+        return NULL;
+    fp->frame_no = frame_no;
+    return fp;
 }
 
 /* Returns an array to the pageinfos associated with the frame number. */
@@ -136,6 +149,8 @@ uint32_t frame_evict(policy_t pol, uint32_t pte) {
         if (fp->dirty) {
             frame_writeback(fp);
         }
+        uint32_t *pd = thread_current()->pagedir;
+        pagedir_clear_page(pd, (void *) pte);
     }
     fp->pages[0].pte = pte;
     fp->pages[0].owner = thread_tid();
@@ -154,18 +169,54 @@ void frame_free_all(void) {
         struct frame *fp = hash_entry(hash_cur(&i), 
                                       struct frame, 
                                       hash_elem);
-        if (fp->pages[0].owner == curr) {
-            frame_writeback(fp);
-            fp->pages[0].pte = 0;
-            ft_num_free++;
+        int i;
+        for (i = 0; i < PAGE_FRAME_RATIO; i++) {
+            if (fp-> pages[i].pte != 0 && fp->pages[i].owner == curr) {
+                uint32_t *pd = thread_current()->pagedir;
+                frame_writeback(fp);
+                pagedir_clear_page(pd, (void *)fp->pages[0].pte);
+                fp->pages[i].pte = 0;
+                ft_num_free++;
+            }
         }
     }
 }
 
 /* Writes the frame back to the swap partition or to a file. */
 void frame_writeback(struct frame *fp) {
-    printf("Writeback not implemented. Called on frame no %u\n",
-            fp->frame_no);
+    struct spt_table *curr_spt = thread_current()->spt;
+    int i;
+    unsigned key;
+    uint32_t *pd;
+    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
+        if (fp->pages[i].pte != 0) {
+            key = spt_get_key((void *) fp->pages[i].pte);
+            struct spt_entry *se = spt_lookup(curr_spt, key);
+            switch (se->type) {
+            case SPT_INVALID:
+                printf("Invalid memory access.\n");
+                sys_exit(-1);
+                break;
+            case SPT_ZERO:
+                pd = thread_current()->pagedir;
+                if (pagedir_is_dirty(pd, (void *)key)) {
+                    se->data.slot = swap_swalloc_and_write((void *) key);
+                    se->type = SPT_SWAP;
+                }
+                break;
+            case SPT_SWAP:
+                pd = thread_current()->pagedir;
+                se->data.slot = swap_swalloc_and_write((void *) key);
+                pagedir_clear_page(pd, (void *)key);
+                break;
+            case SPT_FILESYS:
+                printf("Not implemented.\n");
+                break;
+            default:
+                PANIC("Memory corruption in SPT.\n");
+            }
+        }
+    }
 }
 /* Eviction policies. */
 struct frame *random_frame(void) {

@@ -50,6 +50,8 @@ uint32_t frame_evict(policy_t pol, uint32_t pte);
 void frame_free_all(void);
 void frame_writeback(struct frame *);
 
+struct frame *frame_create_entry(uint32_t frame_no);
+
 /* Adds or removes a page to the array associated with that frame in
  * the frame table. */
 void frame_table_add_vpage(uint32_t frame_no, uint32_t page_no);
