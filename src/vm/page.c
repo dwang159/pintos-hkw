@@ -35,10 +35,37 @@ struct spt_entry *spt_create_entry(unsigned key) {
     return spte;
 }
 
+/* Insert an entry into the page table. */
+void spt_insert(struct spt_table *spt, struct spt_entry *spte) {
+    ASSERT(spt && spte);
+    hash_insert(&spt->data, &spte->elem);
+}
+
+/* Update an entry's data. The provided data pointer should be to
+ * whatever is appropriate given the type.
+ */
+void spt_update(struct spt_entry *spte, enum spt_page_type type, void *data) {
+    ASSERT(spte && data);
+
+    spte->type = type;
+
+    // Copy over the appropriate data.
+    switch (spte->type) {
+    case SPT_ZERO:
+        break;
+    case SPT_FILESYS:
+        break;
+    case SPT_SWAP:
+        break;
+    }
+}
+
 /* Look up a page table entry. Returns NULL if no entry exists. */
 struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key) {
     struct hash_elem *e;
     struct spt_entry *cmp;
+
+    ASSERT(spt);
 
     // Create a temporary struct with the same key so we can find
     // an "equal" element in the hash table.
@@ -57,6 +84,8 @@ struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key) {
 void spt_remove(struct spt_table *spt, unsigned key) {
     struct spt_entry *cmp;
 
+    ASSERT(spt);
+
     cmp = spt_create_entry(key);
     ASSERT(cmp);
     hash_delete(&spt->data, &cmp->elem);
@@ -65,7 +94,9 @@ void spt_remove(struct spt_table *spt, unsigned key) {
 
 /* Hashes a pointer. */
 unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
-    struct spt_entry *spte = hash_entry(e, struct spt_entry, elem);
+    struct spt_entry *spte;
+    ASSERT(e);
+    spte = hash_entry(e, struct spt_entry, elem);
     return hash_int((int) spte->key);
 }
 
@@ -78,11 +109,11 @@ unsigned spt_get_key(void *uaddr) {
 }
 
 /* Compares two hash elems. Returns true if e1 < e2. */
-bool spt_hash_less_func(
-        const struct hash_elem *e1,
-        const struct hash_elem *e2,
-        void *aux UNUSED) {
+bool spt_hash_less_func(const struct hash_elem *e1,
+                        const struct hash_elem *e2, void *aux UNUSED) {
     struct spt_entry *spte1, *spte2;
+
+    ASSERT(e1 && e2);
 
     spte1 = hash_entry(e1, struct spt_entry, elem);
     spte2 = hash_entry(e2, struct spt_entry, elem);

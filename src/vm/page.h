@@ -45,6 +45,12 @@ struct spt_table *spt_create_table(void);
 /* Create a new page table entry. */
 struct spt_entry *spt_create_entry(unsigned key);
 
+/* Insert an entry into the page table. */
+void spt_insert(struct spt_table *spt, struct spt_entry *spte);
+
+/* Update an entry's data. */
+void spt_update(struct spt_entry *spte, enum spt_page_type type, void *data);
+
 /* Look up a page table entry. */
 struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key);
 
