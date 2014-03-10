@@ -41,6 +41,15 @@ void frame_table_destroy() {
     hash_destroy(&ft_hash, NULL);
 }
 
+struct frame *frame_create_entry(uint32_t frame_no) {
+    struct frame *fp;
+    fp = (struct frame *) malloc(sizeof(struct spt_entry));
+    if (!fp)
+        return NULL;
+    fp->frame_no = frame_no;
+    return fp;
+}
+
 /* Returns an array to the pageinfos associated with the frame number. */
 pageinfo *frame_table_lookup(uint32_t frame_no) {
     struct frame *fp;
@@ -164,8 +173,34 @@ void frame_free_all(void) {
 
 /* Writes the frame back to the swap partition or to a file. */
 void frame_writeback(struct frame *fp) {
-    printf("Writeback not implemented. Called on frame no %u\n",
-            fp->frame_no);
+    struct spt *curr_spt = thread_current()->spt;
+    int i;
+    unsigned key;
+    for (i = i; i < PAGE_FRAME_RATIO; i++) {
+        if (fp->pages[i].pte != 0) {
+            key = spt_get_key(fp->pages[i].pte);
+            struct spt_entry *se = spt_lookup(curr_spt, spt_get_key(pte)); 
+            switch se->type {
+            case SPT_INVALID:
+                printf("Invalid memory access.\n");
+                sys_exit(-1);
+                break;
+            case SPT_ZERO:
+                uint32_t *pd = thread_current()->pagedir;
+                if (pagedir_is_dirty(pd, key)) {
+                    se->data.slot = swap_swalloc_and_write((void *) key);
+                    se->type = SPT_SWAP;
+                }
+                break;
+            case SPT_SWAP:
+                uint32_t *pd = thread_current()->pagedir;
+                se->data.slot = swap_swalloc_and_write((void *) key);
+                break;
+            case SPT_FILE:
+                printf("Not implemented.\n");
+            }
+        }
+    }
 }
 /* Eviction policies. */
 struct frame *random_frame(void) {
