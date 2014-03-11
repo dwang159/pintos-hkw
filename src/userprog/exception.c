@@ -164,10 +164,10 @@ static void page_fault(struct intr_frame *f) {
             memset(kpage, 0, PGSIZE);
             break;
         case SPT_FILESYS:
-            file_seek(spte->data.fdata.file, spte->data.fdata.offset);
-            off_t bytes_read = file_read(spte->data.fdata.file,
+            off_t bytes_read = file_read_at(spte->data.fdata.file,
                     kpage,
-                    PGSIZE);
+                    PGSIZE,
+                    spte->data.fdata.offset);
             // If we reached the end of file, then fill the
             // rest of the page with zeros.
             if (bytes_read < PGSIZE) {
