@@ -141,7 +141,7 @@ frame_number_t frame_get(policy_t pol, void *vaddr, bool writeable) {
     lock_acquire(&ft_lock);
     void *p = palloc_get_page(PAL_USER);
     if (p) {
-        frame_number_t frame_no = (frame_number_t) p;
+        frame_no = (frame_number_t) p;
         pte = pte_create_user(vaddr, writeable);
         fp = frame_create_entry(frame_no);
         hash_insert(&ft_hash, &(fp->hash_elem));
