@@ -21,7 +21,6 @@
 #include "threads/malloc.h"
 #include "vm/page.h"
 #include <vector.h>
-#define PAGE_SIZE 4096
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -148,6 +147,9 @@ static void start_process(void *file_name_) {
 
     // Set up the file descriptor table.
     vector_init(&curr->files);
+    vector_zeros(&curr->files, STDOUT_FILENO + 1);
+    // Set up file mappings
+    vector_init(&curr->maps);
     vector_zeros(&curr->files, STDOUT_FILENO + 1);
 
     // Deny writes to the currently executing file. We do this
