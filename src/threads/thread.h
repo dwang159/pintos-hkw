@@ -162,7 +162,7 @@ struct exit_state {
 struct map_entry {
     void *addr;
     int size;
-}
+};
 
 extern struct vector thread_exit_status;
 extern struct lock filesys_lock;

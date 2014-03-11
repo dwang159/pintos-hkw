@@ -77,7 +77,7 @@ static void start_process(void *file_name_) {
         args[arglen] = token;
     }
     // Ensure arguments don't overflow stack page
-    if (maxlen + sizeof(void *) * (arglen + 1) + 2 * sizeof(int) > PAGE_SIZE)
+    if (maxlen + sizeof(void *) * (arglen + 1) + 2 * sizeof(int) > PGSIZE)
     {
         sys_exit(-1);
     }
@@ -150,7 +150,7 @@ static void start_process(void *file_name_) {
     vector_zeros(&curr->files, STDOUT_FILENO + 1);
     // Set up file mappings
     vector_init(&curr->maps);
-    vector_zeros(&curr->files, STDOUT_FILENO + 1);
+    vector_zeros(&curr->maps, STDOUT_FILENO + 1);
 
     // Deny writes to the currently executing file. We do this
     // by opening the executing file, calling file_deny_write, and
@@ -327,8 +327,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
                          bool writable);
 
-/*! Loads an ELF executable from FILE_NAME into the current thread.  
- *  Stores the executable's entry point into *EIP and its initial 
+/*! Loads an ELF executable from FILE_NAME into the current thread.
+ *  Stores the executable's entry point into *EIP and its initial
  *  stack pointer into *ESP.
  *  Returns true if successful, false otherwise. */
 bool load(const char *file_name, void (**eip) (void), void **esp) {
