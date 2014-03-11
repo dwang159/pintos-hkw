@@ -382,7 +382,6 @@ void sys_close(int fd)
  * virtual pages starting at addr */
 
 mapid_t sys_mmap(int fd, void *addr) {
-    printf("Mmap called on %d at %p\n", fd, addr);
     // Error checking for memory and fd validity
     int length = sys_filesize(fd);
     if (!mem_valid(addr) 

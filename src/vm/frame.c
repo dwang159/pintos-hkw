@@ -47,7 +47,7 @@ void frame_table_destroy() {
     hash_destroy(&ft_hash, NULL);
 }
 
-struct frame *frame_create_entry(uint32_t frame_no) {
+struct frame *frame_create_entry(frame_number_t frame_no) {
     struct frame *fp;
     fp = (struct frame *) malloc(sizeof(struct spt_entry));
     if (!fp)
@@ -57,7 +57,7 @@ struct frame *frame_create_entry(uint32_t frame_no) {
 }
 
 /* Returns an array to the pageinfos associated with the frame number. */
-pageinfo *frame_table_lookup(uint32_t frame_no) {
+pageinfo *frame_table_lookup(frame_number_t frame_no) {
     struct frame *fp;
     fp = find_frame(frame_no);
     if (fp != NULL) {
@@ -67,7 +67,7 @@ pageinfo *frame_table_lookup(uint32_t frame_no) {
     }
 }
 
-struct frame *find_frame(uint32_t frame_no) {
+struct frame *find_frame(frame_number_t frame_no) {
     struct frame f;
     struct frame *fp;
     struct hash_elem *he;
@@ -86,7 +86,7 @@ struct frame *find_frame(uint32_t frame_no) {
 
 /* Adds or removes a page to the array associated with that frame in
  * the frame table. */
-void frame_table_add_vpage(uint32_t frame_no, uint32_t pte) {
+void frame_table_add_vpage(frame_number_t frame_no, uint32_t pte) {
     lock_acquire(&ft_lock);
     struct frame *fp = find_frame(frame_no);
     bool found = false;
@@ -105,7 +105,7 @@ void frame_table_add_vpage(uint32_t frame_no, uint32_t pte) {
     ASSERT(found);
 }
 
-void frame_table_rem_vpage(uint32_t frame_no, uint32_t pte) {
+void frame_table_rem_vpage(frame_number_t frame_no, uint32_t pte) {
     lock_acquire(&ft_lock);
     struct frame *fp = find_frame(frame_no);
     int i;
@@ -118,13 +118,13 @@ void frame_table_rem_vpage(uint32_t frame_no, uint32_t pte) {
     lock_release(&ft_lock);
 }
 
-void frame_table_set_flags(uint32_t frame_no, flags_t flags) {
+void frame_table_set_flags(frame_number_t frame_no, flags_t flags) {
     printf("frame_table_set_flags called with %u\n", frame_no);
     printf("Attempted flags were %d\n", flags);
     printf("Error: not implemented\n");
 }
 
-flags_t frame_table_get_flags(uint32_t frame_no) {
+flags_t frame_table_get_flags(frame_number_t frame_no) {
     printf("frame_table_get_flags called with %u\n", frame_no);
     printf("Error: not implemented\n");
     return -1;
@@ -134,12 +134,14 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
  * frame number. Needs to clear the entry in the frame table,
  * the page table, move the contents into swap or write it back to
  * the file that it belongs to. */
-uint32_t frame_get(policy_t pol, uint32_t pte, bool writeable) {
+frame_number_t frame_get(policy_t pol, void *vaddr, bool writeable) {
     struct frame *fp;
+    uint32_t pte;
     lock_acquire(&ft_lock);
     void *p = palloc_get_page(PAL_USER);
     if (p) {
-        uint32_t frame_no = pte_create_user(p, writeable);
+        frame_number_t frame_no = pg_no(p);
+        pte = pte_create_user(vaddr, writeable);
         fp = frame_create_entry(frame_no);
         hash_insert(&ft_hash, &(fp->hash_elem));
     } else {
@@ -154,7 +156,7 @@ uint32_t frame_get(policy_t pol, uint32_t pte, bool writeable) {
     fp->pages[0].pte = pte;
     fp->pages[0].owner = thread_tid();
     fp->dirty = false;
-    uint32_t frame_no = fp->frame_no;
+    frame_number_t frame_no = fp->frame_no;
     lock_release(&ft_lock);
     return frame_no;
 }
@@ -229,10 +231,10 @@ void frame_writeback(struct frame *fp) {
 /* Eviction policies. */
 struct frame *random_frame(void) {
     random_init((unsigned) timer_ticks());
-    uint32_t num;
-    num = (uint32_t) random_ulong() % NUM_FRAMES;
+    frame_number_t num;
+    num = (frame_number_t) random_ulong() % NUM_FRAMES;
     while (!VALID_FRAME_NO(num)) {
-        num = (uint32_t) random_ulong() % NUM_FRAMES;
+        num = (frame_number_t) random_ulong() % NUM_FRAMES;
     }
     return find_frame(num);
 }
