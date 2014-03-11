@@ -394,7 +394,7 @@ mapid_t sys_mmap(int fd, void *addr) {
         sys_exit(-1);
     }
 
-    //int sticks_out = 0;
+//  int sticks_out = 0;
     struct thread *curr = thread_current();
     unsigned i = (unsigned) addr;
 //    for (i = length; i >= 0; i -= PAGE_SIZE) {
