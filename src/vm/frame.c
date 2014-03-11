@@ -134,7 +134,7 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
  * frame number. Needs to clear the entry in the frame table,
  * the page table, move the contents into swap or write it back to
  * the file that it belongs to. */
-uint32_t frame_evict(policy_t pol, uint32_t pte) {
+uint32_t frame_get(policy_t pol, uint32_t pte) {
     struct frame *fp;
     lock_acquire(&ft_lock);
     void *p = palloc_get_page(PAL_USER);
@@ -143,6 +143,7 @@ uint32_t frame_evict(policy_t pol, uint32_t pte) {
         fp = frame_create_entry(frame_no);
         hash_insert(&ft_hash, &(fp->hash_elem));
     } else {
+        PANIC("No evicting");
         fp = pol();
         if (fp->dirty) {
             frame_writeback(fp);
@@ -213,7 +214,7 @@ void frame_writeback(struct frame *fp) {
                     struct file *handle = se->data.fdata.file;
                     off_t offset = se->data.fdata.offset;
                     uintptr_t kpage = vtop((void *) key);
-                    file_write_at(handle, kpage, PGSIZE, offset);
+                    file_write_at(handle, (void *) kpage, PGSIZE, offset);
                 }
                 break;
             default:
