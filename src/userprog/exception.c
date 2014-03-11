@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "syscall.h"
 #include "vm/page.h"
+#include "threads/vaddr.h"
+#include "filesys/file.h"
 
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
@@ -153,16 +155,33 @@ static void page_fault(struct intr_frame *f) {
                 user ? "user" : "kernel");
         kill(f);
     } else {
+        // TODO Get a frame for this page.
+        void *kpage = NULL;
+
         // Load the page. The behavior depends on the page type.
         switch (spte->type) {
-        case SPT_INVALID:
-            sys_exit(-1);
         case SPT_ZERO:
+            memset(kpage, 0, PGSIZE);
             break;
         case SPT_FILESYS:
+            file_seek(spte->data.fdata.file, spte->data.fdata.offset);
+            off_t bytes_read = file_read(spte->data.fdata.file,
+                    kpage,
+                    PGSIZE);
+            // If we reached the end of file, then fill the
+            // rest of the page with zeros.
+            if (bytes_read < PGSIZE) {
+                memset(kpage + bytes_read, 0, PGSIZE - bytes_read);
+            }
             break;
         case SPT_SWAP:
+            swap_free_and_read(kpage, spte->data.slot);
             break;
+        // Shouldn't reach either of these cases unless something went
+        // wrong. Exits if this happens.
+        case SPT_INVALID:
+        default:
+            sys_exit(-1);
         }
     }
 }
