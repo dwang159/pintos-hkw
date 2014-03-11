@@ -1,6 +1,7 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -164,6 +165,7 @@ static void page_fault(struct intr_frame *f) {
             memset(kpage, 0, PGSIZE);
             break;
         case SPT_FILESYS:
+            ; /* Need a statement before a declaration... */
             off_t bytes_read = file_read_at(spte->data.fdata.file,
                     kpage,
                     PGSIZE,

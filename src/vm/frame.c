@@ -5,6 +5,7 @@
 #include "threads/pte.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
 #include <stdlib.h>
@@ -189,25 +190,31 @@ void frame_writeback(struct frame *fp) {
         if (fp->pages[i].pte != 0) {
             key = spt_get_key((void *) fp->pages[i].pte);
             struct spt_entry *se = spt_lookup(curr_spt, key);
+            pd = thread_current()->pagedir;
             switch (se->type) {
             case SPT_INVALID:
                 printf("Invalid memory access.\n");
                 sys_exit(-1);
                 break;
             case SPT_ZERO:
-                pd = thread_current()->pagedir;
                 if (pagedir_is_dirty(pd, (void *)key)) {
                     se->data.slot = swap_swalloc_and_write((void *) key);
                     se->type = SPT_SWAP;
+                } else {
+                    spt_remove(curr_spt, key);
                 }
                 break;
             case SPT_SWAP:
-                pd = thread_current()->pagedir;
                 se->data.slot = swap_swalloc_and_write((void *) key);
                 pagedir_clear_page(pd, (void *)key);
                 break;
             case SPT_FILESYS:
-                printf("Not implemented.\n");
+                if (pagedir_is_dirty(pd, (void *)key)) {
+                    struct file *handle = se->data.fdata.file;
+                    off_t offset = se->data.fdata.offset;
+                    uintptr_t kpage = vtop((void *) key);
+                    file_write_at(handle, kpage, PGSIZE, offset);
+                }
                 break;
             default:
                 PANIC("Memory corruption in SPT.\n");
