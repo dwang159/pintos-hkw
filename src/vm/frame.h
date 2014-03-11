@@ -46,7 +46,7 @@ pageinfo *frame_table_lookup(uint32_t frame_no);
 void frame_table_set_flags(uint32_t frame_no, uint32_t flags);
 uint32_t frame_table_get_flags(uint32_t frame_no);
 
-uint32_t frame_get(policy_t pol, uint32_t pte);
+uint32_t frame_get(policy_t pol, uint32_t pte, bool writeable);
 void frame_free_all(void);
 void frame_writeback(struct frame *);
 

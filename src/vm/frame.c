@@ -134,12 +134,12 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
  * frame number. Needs to clear the entry in the frame table,
  * the page table, move the contents into swap or write it back to
  * the file that it belongs to. */
-uint32_t frame_get(policy_t pol, uint32_t pte) {
+uint32_t frame_get(policy_t pol, uint32_t pte, bool writeable) {
     struct frame *fp;
     lock_acquire(&ft_lock);
     void *p = palloc_get_page(PAL_USER);
     if (p) {
-        uint32_t frame_no = pte_create_user(p, true);
+        uint32_t frame_no = pte_create_user(p, writeable);
         fp = frame_create_entry(frame_no);
         hash_insert(&ft_hash, &(fp->hash_elem));
     } else {
