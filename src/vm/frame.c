@@ -4,6 +4,7 @@
 #include <lib/random.h>
 #include "threads/pte.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
 #include <stdlib.h>
@@ -104,6 +105,7 @@ void frame_table_add_vpage(uint32_t frame_no, uint32_t pte) {
 }
 
 void frame_table_rem_vpage(uint32_t frame_no, uint32_t pte) {
+    lock_acquire(&ft_lock);
     struct frame *fp = find_frame(frame_no);
     int i;
     for (i = 0; i < PAGE_FRAME_RATIO; i++) {
@@ -112,6 +114,7 @@ void frame_table_rem_vpage(uint32_t frame_no, uint32_t pte) {
             return;
         }
     }
+    lock_release(&ft_lock);
 }
 
 void frame_table_set_flags(uint32_t frame_no, flags_t flags) {
@@ -133,17 +136,11 @@ flags_t frame_table_get_flags(uint32_t frame_no) {
 uint32_t frame_evict(policy_t pol, uint32_t pte) {
     struct frame *fp;
     lock_acquire(&ft_lock);
-    if (ft_num_free > 0) {
-        struct hash_iterator i;
-        hash_first(&i, &ft_hash);
-        while (hash_next(&i)) {
-            fp = hash_entry(hash_cur(&i), struct frame, hash_elem);
-            if (fp->pages[0].pte == 0) {
-                ft_num_free--;
-                break;
-            }
-        }
-        PANIC("Loop should have ended. Internal structure error.\n");
+    void *p = palloc_get_page(PAL_USER);
+    if (p) {
+        uint32_t frame_no = pte_create_user(p, true);
+        fp = frame_create_entry(frame_no);
+        hash_insert(&ft_hash, &(fp->hash_elem));
     } else {
         fp = pol();
         if (fp->dirty) {
@@ -216,8 +213,11 @@ void frame_writeback(struct frame *fp) {
                 PANIC("Memory corruption in SPT.\n");
             }
         }
+        void *page = pte_get_page(fp->pages[i].pte);
+        palloc_free_page(page);
     }
 }
+
 /* Eviction policies. */
 struct frame *random_frame(void) {
     random_init((unsigned) timer_ticks());
