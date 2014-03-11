@@ -137,6 +137,7 @@ flags_t frame_table_get_flags(frame_number_t frame_no) {
 frame_number_t frame_get(policy_t pol, void *vaddr, bool writeable) {
     struct frame *fp;
     uint32_t pte;
+    frame_number_t frame_no;
     lock_acquire(&ft_lock);
     void *p = palloc_get_page(PAL_USER);
     if (p) {
@@ -152,11 +153,11 @@ frame_number_t frame_get(policy_t pol, void *vaddr, bool writeable) {
         }
         uint32_t *pd = thread_current()->pagedir;
         pagedir_clear_page(pd, (void *) pte);
+        frame_no = fp->frame_no;
     }
     fp->pages[0].pte = pte;
     fp->pages[0].owner = thread_tid();
     fp->dirty = false;
-    frame_number_t frame_no = fp->frame_no;
     lock_release(&ft_lock);
     return frame_no;
 }
