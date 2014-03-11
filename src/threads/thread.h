@@ -135,6 +135,9 @@ struct thread {
     // File descriptor table.
     struct vector files;
 
+    // Mapped files
+    struct vector maps;
+
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
 
@@ -155,6 +158,11 @@ struct exit_state {
     // for this child.
     struct semaphore waiting;
 };
+
+struct map_entry {
+    void *addr;
+    int size;
+}
 
 extern struct vector thread_exit_status;
 extern struct lock filesys_lock;

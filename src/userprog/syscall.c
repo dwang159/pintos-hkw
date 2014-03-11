@@ -173,7 +173,7 @@ bool mem_valid(const void *addr) {
 }
 
 /* Checks if the file descriptor is valid. */
-bool fd_valid(int fd) {
+boolfd_valid(int fd) {
     struct thread *curr = thread_current();
     // File pointer should not be null unless it is STDIN or STDOUT.
     if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
@@ -380,12 +380,74 @@ void sys_close(int fd)
 
 mapid_t sys_mmap(int fd, void *addr) {
     printf("Mmap called on %d at %p\n", fd, addr);
-    printf("However, it's unimplemented.\n");
-    return -1;
+    // Error checking for memory and fd validity
+    if (!mem_valid(addr) || !mem_valid(addr + length) || fd == STDOUT_FILENO
+            fd == STDIN_FILENO || !fd_valid(fd) || addr % PAGE_SIZE != 0)
+        sys_exit(-1);
+
+    // More error checking
+    int length = file_length(mapped);
+    file *mapped = thread_current()->files.data[fd];
+    if (length == 0)
+        return -1;
+
+    int sticks_out = 0;
+    struct thread *curr = thread_current();
+    int i, addridx = (int) addr;
+    for (int i = length; i >= 0; i -= PAGE_SIZE) {
+        if (i < PAGE_SIZE)
+            sticks_out = i;
+        frame = frame_get_frame(addridx);
+        spt_create_entry(addridx);
+        // TODO modify spt data, ensure that file sticking out is zeroed
+        addridx += PAGE_SIZE;
+    }
+
+    /* Insert file into first non-null entry of file mapping
+     * table. Return the index where the file was inserted
+     */
+    struct map_entry *mapinfo;
+    for (i = STDOUT_FILENO + 1; i < curr->maps.size; i++) {
+        if (curr->maps.data[i] == NULL) {
+            mapinfo = (struct map_entry *) malloc(sizeof(struct map_entry));
+            *mapinfo = {.addr = addr, .size = length};
+            curr->maps.data[i] = mapinfo;
+            return i;
+        }
+    }
+    /* If all current values are non-null, append */
+    vector_append(&curr->files, addr);
+    return (curr->maps.size - 1);
 }
 
 /* Unmaps the mapping */
 void sys_munmap(mapid_t mapping) {
-    printf("Munmap called with %d as arg\n", mapping);
+    thread *curr = thread_current();
+    int i;
+    if (mapping >= curr->maps.size || curr->maps.data[mapping] != NULL)
+        sys_exit(-1);
+    for (i = 0; i < curr->maps.size; i++)
+    {
+        map = (int *) curr->maps.data[i];
+        if ((*map) == mapping)
+            valid = true;
+    }
+    if (!valid)
+        return -1;
+
+    // TODO finish unmapping things
+    void *phys;
+    void *loc = curr->maps.data[mapping].addr;
+    int size = curr->maps.data[mapping].size;
+    for (i = size; i > 0; i -= PAGE_SIZE)
+    {
+        phys = pagedir_get_page(curr->pagedir, loc);
+        if (phys != NULL)
+        {
+            frame_writeback();
+        // Unmap things
+        }
+    }
+
     printf("However, it's unimplemented.\n");
 }
