@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "pagedir.h"
 #include "filesys/file.h"
@@ -11,6 +12,7 @@
 #include "devices/shutdown.h"
 #include "process.h"
 #include "threads/synch.h"
+#include "vm/frame.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -173,7 +175,7 @@ bool mem_valid(const void *addr) {
 }
 
 /* Checks if the file descriptor is valid. */
-boolfd_valid(int fd) {
+bool fd_valid(int fd) {
     struct thread *curr = thread_current();
     // File pointer should not be null unless it is STDIN or STDOUT.
     if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
@@ -381,27 +383,28 @@ void sys_close(int fd)
 mapid_t sys_mmap(int fd, void *addr) {
     printf("Mmap called on %d at %p\n", fd, addr);
     // Error checking for memory and fd validity
-    if (!mem_valid(addr) || !mem_valid(addr + length) || fd == STDOUT_FILENO
-            fd == STDIN_FILENO || !fd_valid(fd) || addr % PAGE_SIZE != 0)
+    int length = sys_filesize(fd);
+    if (!mem_valid(addr) 
+        || !mem_valid(addr + length)
+        || length == 0 
+        || fd == STDOUT_FILENO
+        || fd == STDIN_FILENO 
+        || !fd_valid(fd) 
+        || (((unsigned) addr) % PAGE_SIZE) != 0) {
         sys_exit(-1);
-
-    // More error checking
-    int length = file_length(mapped);
-    file *mapped = thread_current()->files.data[fd];
-    if (length == 0)
-        return -1;
-
-    int sticks_out = 0;
-    struct thread *curr = thread_current();
-    int i, addridx = (int) addr;
-    for (int i = length; i >= 0; i -= PAGE_SIZE) {
-        if (i < PAGE_SIZE)
-            sticks_out = i;
-        frame = frame_get_frame(addridx);
-        spt_create_entry(addridx);
-        // TODO modify spt data, ensure that file sticking out is zeroed
-        addridx += PAGE_SIZE;
     }
+
+    //int sticks_out = 0;
+    struct thread *curr = thread_current();
+    unsigned i = (unsigned) addr;
+//    for (i = length; i >= 0; i -= PAGE_SIZE) {
+//        if (i < PAGE_SIZE)
+//            sticks_out = i;
+//        frame = frame_get_frame(addridx);
+//        spt_create_entry(addridx);
+//        // TODO modify spt data, ensure that file sticking out is zeroed
+//        addridx += PAGE_SIZE;
+//    }
 
     /* Insert file into first non-null entry of file mapping
      * table. Return the index where the file was inserted
@@ -410,8 +413,10 @@ mapid_t sys_mmap(int fd, void *addr) {
     for (i = STDOUT_FILENO + 1; i < curr->maps.size; i++) {
         if (curr->maps.data[i] == NULL) {
             mapinfo = (struct map_entry *) malloc(sizeof(struct map_entry));
-            *mapinfo = {.addr = addr, .size = length};
-            curr->maps.data[i] = mapinfo;
+            mapinfo->addr = addr;
+            mapinfo->size = length;
+            struct map_entry ** mep = curr->maps.data[i];
+            *mep = mapinfo;
             return i;
         }
     }
@@ -422,32 +427,29 @@ mapid_t sys_mmap(int fd, void *addr) {
 
 /* Unmaps the mapping */
 void sys_munmap(mapid_t mapping) {
-    thread *curr = thread_current();
+    struct thread *curr = thread_current();
     int i;
-    if (mapping >= curr->maps.size || curr->maps.data[mapping] != NULL)
-        sys_exit(-1);
-    for (i = 0; i < curr->maps.size; i++)
-    {
-        map = (int *) curr->maps.data[i];
-        if ((*map) == mapping)
-            valid = true;
+    if (mapping >= curr->maps.size) {
+        goto invalid;
     }
-    if (!valid)
-        return -1;
+    if (curr->maps.data[mapping] != NULL) {
+        goto invalid;
+    }
 
     // TODO finish unmapping things
     void *phys;
-    void *loc = curr->maps.data[mapping].addr;
-    int size = curr->maps.data[mapping].size;
-    for (i = size; i > 0; i -= PAGE_SIZE)
-    {
+    struct map_entry *me = curr->maps.data[mapping];
+    void *loc = me->addr;
+    int size = me->size;
+    for (i = size; i > 0; i -= PAGE_SIZE) {
         phys = pagedir_get_page(curr->pagedir, loc);
-        if (phys != NULL)
-        {
-            frame_writeback();
+        if (phys != NULL) {
+            // Need to translate from address to frame number.
+            struct frame *fp = find_frame((uint32_t) phys);
+            frame_writeback(fp);
         // Unmap things
         }
     }
-
-    printf("However, it's unimplemented.\n");
+invalid:
+    sys_exit(-1);
 }

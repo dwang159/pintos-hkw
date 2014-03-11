@@ -12,7 +12,10 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+
+#ifdef USERPROG
 #include "vm/page.h"
+#endif
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -129,14 +132,14 @@ struct thread {
     // Supplemental page table.
     struct spt_table *spt;
 
+    // Mapped files
+    struct vector maps;
     /**@{*/
 #endif
 
     // File descriptor table.
     struct vector files;
 
-    // Mapped files
-    struct vector maps;
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
@@ -162,7 +165,7 @@ struct exit_state {
 struct map_entry {
     void *addr;
     int size;
-}
+};
 
 extern struct vector thread_exit_status;
 extern struct lock filesys_lock;
@@ -189,7 +192,7 @@ void thread_sleep(void);
 void thread_wake(struct thread *);
 bool sleep_cmp(const struct list_elem *e1, const struct list_elem *e2, void*UNUSED);
 
-struct thread *thread_current (void);
+struct thread *thread_current(void);
 tid_t thread_tid(void);
 const char *thread_name(void);
 

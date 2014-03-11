@@ -7,7 +7,7 @@
 
 #define PAGE_SIZE 4096
 
-typedef int mapid_t;
+typedef unsigned int mapid_t;
 
 void syscall_init(void);
 
