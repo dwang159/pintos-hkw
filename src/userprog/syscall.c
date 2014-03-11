@@ -12,6 +12,7 @@
 #include "devices/shutdown.h"
 #include "process.h"
 #include "threads/synch.h"
+#include "threads/vaddr.h"
 #include "vm/frame.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
@@ -390,20 +391,20 @@ mapid_t sys_mmap(int fd, void *addr) {
         || fd == STDOUT_FILENO
         || fd == STDIN_FILENO 
         || !fd_valid(fd) 
-        || (((unsigned) addr) % PAGE_SIZE) != 0) {
+        || (((unsigned) addr) % PGSIZE) != 0) {
         sys_exit(-1);
     }
 
 //  int sticks_out = 0;
     struct thread *curr = thread_current();
     unsigned i = (unsigned) addr;
-//    for (i = length; i >= 0; i -= PAGE_SIZE) {
-//        if (i < PAGE_SIZE)
+//    for (i = length; i >= 0; i -= PGSIZE) {
+//        if (i < PGSIZE)
 //            sticks_out = i;
 //        frame = frame_get_frame(addridx);
 //        spt_create_entry(addridx);
 //        // TODO modify spt data, ensure that file sticking out is zeroed
-//        addridx += PAGE_SIZE;
+//        addridx += PGSIZE;
 //    }
 
     /* Insert file into first non-null entry of file mapping
@@ -441,7 +442,7 @@ void sys_munmap(mapid_t mapping) {
     struct map_entry *me = curr->maps.data[mapping];
     void *loc = me->addr;
     int size = me->size;
-    for (i = size; i > 0; i -= PAGE_SIZE) {
+    for (i = size; i > 0; i -= PGSIZE) {
         phys = pagedir_get_page(curr->pagedir, loc);
         if (phys != NULL) {
             // Need to translate from address to frame number.
