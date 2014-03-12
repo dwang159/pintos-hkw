@@ -140,10 +140,10 @@ void * frame_get(void *uaddr, bool writable) {
     uint32_t pte;
     frame_number_t frame_no;
     ASSERT(is_user_vaddr(uaddr));
-    //lock_acquire(&ft_lock);
+    lock_acquire(&ft_lock);
     void *kpage = palloc_get_page(PAL_USER);
-    install_page(uaddr, kpage, writable);
-    return kpage;
+    //install_page(uaddr, kpage, writable);
+    //return kpage;
     ///printf("kpage: %p\n", kpage);
     ASSERT(is_kernel_vaddr(kpage));
     if (kpage) {
@@ -151,7 +151,7 @@ void * frame_get(void *uaddr, bool writable) {
         ///printf("pte will fail...\n");
         ///printf("vaddr: %p\n", uaddr);
         ///printf("kpage: %p\n", kpage);
-        uintptr_t paddr = vtop(kpage);
+        //uintptr_t paddr = vtop(kpage);
         ///printf("paddr: %p\n", (void *)paddr);
         pte = pte_create_user(kpage, writable);
         ///printf("just kidding.\n");
@@ -169,7 +169,7 @@ void * frame_get(void *uaddr, bool writable) {
         frame_no = fp->frame_no;
     }
     fp->pages[0].pte = pte;
-    fp->pages[0].owner = thread_current();
+    fp->pages[0].owner = thread_tid();
     fp->dirty = false;
     lock_release(&ft_lock);
     return kpage;

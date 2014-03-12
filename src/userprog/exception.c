@@ -140,7 +140,6 @@ static void page_fault(struct intr_frame *f) {
     struct thread *t = thread_current();
     struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
 
-        printf("%x\n", fault_addr);
     if (!spte) {
         printf("Error spte not found\n");
         kill(f);
@@ -155,25 +154,15 @@ static void page_fault(struct intr_frame *f) {
                 int page_read_bytes = spte->data.fdata.read_bytes;
                 int page_zero_bytes = spte->data.fdata.zero_bytes;
                 struct file * file = spte->data.fdata.file;
-        /* Get a page of memory. */
-        //uint8_t *kpage = palloc_get_page(PAL_USER);
-        file_seek(file, spte->data.fdata.offset);
 
-        /* Load this page. */
-        if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
-            palloc_free_page(kpage);
-        }
-        memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-        /* Add the page to the process's address space. */
-        //if (!install_page(pg_round_down(fault_addr), kpage, true)) {
-        //    palloc_free_page(kpage);
-        //}
-
-/*                file_read_at(spte->data.fdata.file, kpage, 
-                    read_bytes, spte->data.fdata.offset);
-                if (zero_bytes > 0)
-                    memset(kpage + read_bytes, 0, zero_bytes);*/
+                file_seek(file, spte->data.fdata.offset);
+                /* Load this page. */
+                if (file_read(file, kpage, page_read_bytes) !=
+                    (int) page_read_bytes) {
+                    palloc_free_page(kpage);
+                }
+                /* Zero the proper bytes in the page */
+                memset(kpage + page_read_bytes, 0, page_zero_bytes);
                 break;
             default:
                 sys_exit(-1);

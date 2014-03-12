@@ -504,8 +504,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         struct thread * curr = thread_current();
-        struct spt_entry *se = spt_create_entry(spt_get_key((void *) upage));
-        spt_update_filesys(se, file, ofs, read_bytes, zero_bytes, writable);
+        struct spt_entry *se = spt_create_entry(spt_get_key(upage));
+        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes, writable);
         spt_insert(curr->spt, se);
 
 ///        /* Get a page of memory. */
@@ -530,6 +530,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
+        ofs += PGSIZE;
     }
     return true;
 }
@@ -540,18 +541,18 @@ static bool setup_stack(void **esp) {
     uint8_t *kpage;
     bool success = false;
 
+    // Get a frame for the stack
     kpage = frame_get(((uint8_t *) PHYS_BASE) - PGSIZE, true);
-    /*struct spt_entry *se = spt_create_entry(((uint8_t) PHYS_BASE) - PGSIZE);
+    // Create a spt entry
+    struct spt_entry *se = spt_create_entry(((uint8_t) PHYS_BASE) - PGSIZE);
     spt_insert(thread_current()->spt, se);
-    spt_update_zero(se);*/
 
     if (kpage != NULL) {
-        //success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
         *esp = PHYS_BASE;
     }
     else
     {
-            palloc_free_page(kpage);
+        palloc_free_page(kpage);
     }
     return true;
 }
