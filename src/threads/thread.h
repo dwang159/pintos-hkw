@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+#include "vm/page.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -124,6 +125,9 @@ struct thread {
     uint32_t *pagedir;                  /*!< Page directory. */
     /**@{*/
 #endif
+
+    //Supplemental page table
+    struct spt_table *spt;
 
     // File descriptor table.
     struct vector files;
