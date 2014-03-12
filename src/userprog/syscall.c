@@ -154,8 +154,9 @@ static void syscall_handler(struct intr_frame *f) {
 
 /* Checks that addr points into user space on a currently mapped page. */
 bool mem_valid(const void *addr) {
-    return (addr != NULL && is_user_vaddr(addr) &&
-            pagedir_get_page(thread_current()->pagedir, addr) != NULL);
+    return (addr != NULL && is_user_vaddr(addr) && 
+            (pagedir_get_page(thread_current()->pagedir, addr) != NULL ||
+             spt_lookup(thread_current()->spt, spt_get_key(addr)) != NULL));
 }
 
 /* Checks if the file descriptor is valid. */
@@ -287,9 +288,12 @@ int sys_read(int fd, void *buffer, unsigned int size) {
     struct thread *curr = thread_current();
 
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
-            fd == STDOUT_FILENO || !fd_valid(fd))
+            fd == STDOUT_FILENO || !fd_valid(fd)){
+        printf("hi from read\n");
         sys_exit(-1);
+        }
 
+    ///printf("hi\n");
     if (fd == STDIN_FILENO) {
         for (i = 0; i < size; i++) {
             *((char *) buffer) = input_getc();

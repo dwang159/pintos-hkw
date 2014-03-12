@@ -553,6 +553,7 @@ static bool setup_stack(void **esp) {
     else
     {
         palloc_free_page(kpage);
+        return false;
     }
     return true;
 }

@@ -144,13 +144,8 @@ static void page_fault(struct intr_frame *f) {
     void *kpage;
     struct thread *t = thread_current();
     if (fault_addr >= f->esp - STACK_HEURISTIC && 
-        fault_addr <= f->esp + STACK_HEURISTIC)
+        fault_addr < PHYS_BASE + MAX_STACK)
     {
-        if (fault_addr < PHYS_BASE - MAX_STACK)
-        {
-            printf("Error: stack overflow\n");
-            kill(f);
-        }
         kpage = frame_get(pg_round_down(fault_addr), true);
         struct spt_entry *se = spt_create_entry(spt_get_key(fault_addr));
         spt_insert(t->spt, se);
