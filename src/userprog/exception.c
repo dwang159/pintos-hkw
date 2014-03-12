@@ -11,6 +11,9 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 
+#define MAX_STACK 0x800000
+#define STACK_HEURISTIC 32
+
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -137,35 +140,52 @@ static void page_fault(struct intr_frame *f) {
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
+    ///printf("%x\n", fault_addr);
+    void *kpage;
     struct thread *t = thread_current();
-    struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
-
-    if (!spte) {
-        printf("Error spte not found\n");
-        kill(f);
+    if (fault_addr >= f->esp - STACK_HEURISTIC && 
+        fault_addr <= f->esp + STACK_HEURISTIC)
+    {
+        if (fault_addr < PHYS_BASE - MAX_STACK)
+        {
+            printf("Error: stack overflow\n");
+            kill(f);
+        }
+        kpage = frame_get(pg_round_down(fault_addr), true);
+        struct spt_entry *se = spt_create_entry(spt_get_key(fault_addr));
+        spt_insert(t->spt, se);
     }
-    else {
-        void *kpage = frame_get(pg_round_down(fault_addr), true);
-        switch (spte->type) {
-            case SPT_ZERO:
-                memset(kpage, 0, PGSIZE);
-            case SPT_FILESYS:
-                ;
-                int page_read_bytes = spte->data.fdata.read_bytes;
-                int page_zero_bytes = spte->data.fdata.zero_bytes;
-                struct file * file = spte->data.fdata.file;
-
-                file_seek(file, spte->data.fdata.offset);
-                /* Load this page. */
-                if (file_read(file, kpage, page_read_bytes) !=
-                    (int) page_read_bytes) {
-                    palloc_free_page(kpage);
-                }
-                /* Zero the proper bytes in the page */
-                memset(kpage + page_read_bytes, 0, page_zero_bytes);
-                break;
-            default:
-                sys_exit(-1);
+    else
+    {
+        struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
+    
+        if (!spte) {
+            //printf("Error spte not found\n");
+            kill(f);
+        }
+        else {
+            kpage = frame_get(pg_round_down(fault_addr), true);
+            switch (spte->type) {
+                case SPT_ZERO:
+                    memset(kpage, 0, PGSIZE);
+                case SPT_FILESYS:
+                    ;
+                    int page_read_bytes = spte->data.fdata.read_bytes;
+                    int page_zero_bytes = spte->data.fdata.zero_bytes;
+                    struct file * file = spte->data.fdata.file;
+    
+                    file_seek(file, spte->data.fdata.offset);
+                    /* Load this page. */
+                    if (file_read(file, kpage, page_read_bytes) !=
+                        (int) page_read_bytes) {
+                        palloc_free_page(kpage);
+                    }
+                    /* Zero the proper bytes in the page */
+                    memset(kpage + page_read_bytes, 0, page_zero_bytes);
+                    break;
+                default:
+                    sys_exit(-1);
+            }
         }
     }
     /* To implement virtual memory, delete the rest of the function
