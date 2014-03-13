@@ -15,7 +15,6 @@ static struct bitmap *swap_table;
 static struct block *swap_dev;
 
 #define SWAP_NUM_SLOTS (1 << 10)
-#define SWAP_NUM_PAGES ((SWAP_NUM_SLOTS / (PGSIZE * 8)) + 1)
 
 static block_sector_t slot_to_sect(slotid_t slot) {
     return (block_sector_t) slot;
@@ -23,8 +22,7 @@ static block_sector_t slot_to_sect(slotid_t slot) {
 
 /* Allocate space for the swap table and initialize it. */
 void swap_table_init() {
-    swap_buffer = palloc_get_multiple(PAL_ASSERT, SWAP_NUM_PAGES);
-    swap_table = bitmap_create_in_buf(SWAP_NUM_SLOTS, swap_buffer, 0);
+    swap_table = bitmap_create(SWAP_NUM_SLOTS);
     swap_dev = block_get_role(BLOCK_SWAP);
     bitmap_mark(swap_table, 0); /* The 0 slot should never be given out,
                                   * for, you know, safety reasons. Null
@@ -34,7 +32,7 @@ void swap_table_init() {
 
 void swap_table_destroy() {
     lock_acquire(&swap_table_lock);
-    palloc_free_multiple(swap_buffer, SWAP_NUM_PAGES);
+    bitmap_destroy(swap_table);
     /* Don't bother releasing the lock. There is no more swap table! */ 
 }
 
