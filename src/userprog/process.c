@@ -22,6 +22,7 @@
 #include <vector.h>
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/fmap.h"
 #define PAGE_SIZE 4096
 
 static thread_func start_process NO_RETURN;
@@ -337,8 +338,10 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     /* Allocate and activate page directory. */
     t->pagedir = pagedir_create();
     t->spt = spt_create_table();
-    if (t->pagedir == NULL)
+    t->fmap = fmap_create_table();
+    if (t->pagedir == NULL || t->spt == NULL || f->map == NULL)
         goto done;
+
     process_activate();
 
     /* Open executable file. */

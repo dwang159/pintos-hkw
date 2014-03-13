@@ -5,26 +5,32 @@
 #include "threads/malloc.h"
 #include "vm/fmap.h"
 
+static unsigned key_giver = 0;
+
 /* Create a new mapping table. Returns a null pointer if memory
  * allocation fails.
  */
 struct fmap_table *fmap_create_table() {
     struct fmap_table *fmap;
 
-    fmap = (struct fmap_table *) malloc(sizeof(struct map_table));
+    fmap = (struct fmap_table *) malloc(sizeof(struct fmap_table));
     if (!fmap || 
             !hash_init(&fmap->data, &fmap_hash, &fmap_hash_less_func, NULL))
         return NULL;
     return fmap;
 }
 
+unsigned fmap_generate_key(void) {
+    // Increment the global key_giver so that it doesn't repeat itself.
+    return key_giver++;
+}
+
 /* Create a new mapping table entry. Returns a null pointer if
  * memory allocation fails.  */
 struct fmap_entry *fmap_create_entry(unsigned key) {
     struct fmap_entry *fme;
-
     fme = (struct fmap_entry *) malloc(sizeof(struct fmap_entry));
-    if (!fmape)
+    if (!fme)
         return NULL;
 
     fme->key = key;
@@ -48,8 +54,8 @@ struct fmap_entry *fmap_lookup(struct fmap_table *fmap, unsigned key) {
     // an "equal" element in the hash table.
     fme = fmap_create_entry(key);
     ASSERT(fme);
-    e = hash_find(&fmap->data, &cmp->elem);
-    free(cmp);
+    e = hash_find(&fmap->data, &fme->elem);
+    free(fme);
 
     if (!e)
         return NULL;
@@ -66,7 +72,7 @@ void fmap_remove(struct fmap_table *fmap, unsigned key) {
     fme = fmap_create_entry(key);
     ASSERT(fme);
     hash_delete(&fmap->data, &fme->elem);
-    free(cmp);
+    free(fme);
 }
 
 /* Hashes a mapping */
@@ -80,14 +86,14 @@ unsigned fmap_hash(const struct hash_elem *e, void *aux UNUSED) {
 /* Compares two hash elems. Returns true if e1 < e2. */
 bool fmap_hash_less_func(const struct hash_elem *e1,
                         const struct hash_elem *e2, void *aux UNUSED) {
-    struct fmap_entry *fmape1, *fmape2;
+    struct fmap_entry *fme1, *fme2;
 
     ASSERT(e1 && e2);
 
     fme1 = hash_entry(e1, struct fmap_entry, elem);
     fme2 = hash_entry(e2, struct fmap_entry, elem);
 
-    return fmape1->key < fmape2->key;
+    return fme1->key < fme2->key;
 }
 
 //TODO fmap table destructor (also, incidentally, spt desctructor)

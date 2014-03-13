@@ -25,6 +25,9 @@ struct fmap_entry {
 /* Create a new mapping table. */
 struct fmap_table *fmap_create_table(void);
 
+/* Creates a unique key each time. */
+unsigned fmap_generate_key(void);
+
 /* Create a new page table entry. */
 struct fmap_entry *fmap_create_entry(unsigned key);
 
