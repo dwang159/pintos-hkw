@@ -127,7 +127,7 @@ unsigned spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
  * The key is simply the bits of the address used to determine
  * the page, with all other bits zeroed out.
  */
-unsigned spt_get_key(void *uaddr) {
+unsigned spt_get_key(const void *uaddr) {
     return ((unsigned) uaddr) & (PDMASK | PTMASK);
 }
 
