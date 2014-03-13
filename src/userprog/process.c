@@ -503,10 +503,12 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        struct thread * curr = thread_current();
-        struct spt_entry *se = spt_create_entry(spt_get_key(upage));
-        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes, writable);
-        spt_insert(curr->spt, se);
+        struct thread *curr = thread_current();
+        struct spt_entry *spte = spt_create_entry(spt_get_key(upage));
+        // Should be read from file.
+        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, writable);
+        spt_update_filesys(spte, file, ofs, page_read_bytes, page_zero_bytes);
+        spt_insert(curr->spt, spte);
 
         /* Advance. */
         read_bytes -= page_read_bytes;
@@ -527,14 +529,13 @@ static bool setup_stack(void **esp) {
     // Create a spt entry
     struct spt_entry *spte = spt_create_entry(
             spt_get_key((void *) PHYS_BASE - PGSIZE));
-
+    // Shouldn't need to be read, but should be written to swap if evicted.
+    spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
     spt_insert(thread_current()->spt, spte);
 
     if (kpage != NULL) {
         *esp = PHYS_BASE;
-    }
-    else
-    {
+    } else {
         palloc_free_page(kpage);
         return false;
     }

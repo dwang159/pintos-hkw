@@ -43,7 +43,8 @@ struct spt_entry *spt_create_entry(unsigned key) {
 
     spte->key = key;
     // Initialize as invalid.
-    spte->type = SPT_INVALID;
+    spte->read_status = SPT_INVALID;
+    spte->write_status = SPT_INVALID;
     return spte;
 }
 
@@ -53,36 +54,32 @@ void spt_insert(struct spt_table *spt, struct spt_entry *spte) {
     hash_insert(&spt->data, &spte->elem);
 }
 
-/* Update an entry to SPT_ZERO. */
-void spt_update_zero(struct spt_entry *spte) {
+/* Update an entry's read/write status. */
+void spt_update_status(struct spt_entry *spte,
+        enum spt_page_type read_status,
+        enum spt_page_type write_status,
+        bool writable) {
     ASSERT(spte);
-    spte->type = SPT_ZERO;
+    spte->read_status = read_status;
+    spte->write_status = write_status;
+    spte->writable = writable;
 }
 
-/* Update an entry to SPT_FILESYS. */
+/* Update an entry's file data. */
 void spt_update_filesys(struct spt_entry *spte,
                         struct file *file, off_t offset,
-                        int read_bytes, int zero_bytes, bool writable) {
+                        int read_bytes, int zero_bytes) {
     ASSERT(spte && file);
-    spte->type = SPT_FILESYS;
     spte->data.fdata.file = file;
     spte->data.fdata.offset = offset;
     spte->data.fdata.read_bytes = read_bytes;
     spte->data.fdata.zero_bytes = zero_bytes;
-    spte->data.fdata.writable = writable;
 }
 
-/* Update an entry to SPT_SWAP. */
+/* Update an entry's swap data. */
 void spt_update_swap(struct spt_entry *spte, size_t slot) {
     ASSERT(spte);
-    spte->type = SPT_SWAP;
     spte->data.slot = slot;
-}
-
-/* Update an entry to SPT_INVALID (invalidates the page). */
-void spt_invalidate(struct spt_entry *spte) {
-    ASSERT(spte);
-    spte->type = SPT_INVALID;
 }
 
 /* Look up a page table entry. Returns NULL if no entry exists. */

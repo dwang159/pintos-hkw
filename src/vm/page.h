@@ -11,8 +11,7 @@
 #include "filesys/file.h"
 #include "vm/swap.h"
 
-// Page types. Can be a page of zeros, a page to be read from the
-// filesystem, or a page to be read from swap.
+/* Possible values for where to read and write data. */
 enum spt_page_type {
     SPT_INVALID,
     SPT_ZERO,
@@ -34,8 +33,9 @@ struct spt_entry {
     // the lower 12 bits zeroed out.
     unsigned key;
 
-    // Page type.
-    enum spt_page_type type;
+    // Page status (where to read and write data).
+    enum spt_page_type read_status;
+    enum spt_page_type write_status;
 
     // Additional data about the page, depending on the page type.
     union {
@@ -46,11 +46,12 @@ struct spt_entry {
             off_t offset;
             int read_bytes;
             int zero_bytes;
-            bool writable;
         } fdata;
         // Used if associated with swap.
         size_t slot;
     } data;
+
+    bool writable;
 };
 
 /* Create a new page table. */
@@ -62,19 +63,19 @@ struct spt_entry *spt_create_entry(unsigned key);
 /* Insert an entry into the page table. */
 void spt_insert(struct spt_table *spt, struct spt_entry *spte);
 
-/* Update an entry to SPT_ZERO. */
-void spt_update_zero(struct spt_entry *spte);
+/* Update an entry's read/write status. */
+void spt_update_status(struct spt_entry *spte,
+        enum spt_page_type read_status,
+        enum spt_page_type write_status,
+        bool writable);
 
-/* Update an entry to SPT_FILESYS. */
+/* Update an entry's file data. */
 void spt_update_filesys(struct spt_entry *spte,
                         struct file *file, off_t offset,
-                        int read_bytes, int zero_bytes, bool writable);
+                        int read_bytes, int zero_bytes);
 
-/* Update an entry to SPT_SWAP. */
+/* Update an entry's swap data. */
 void spt_update_swap(struct spt_entry *spte, size_t slot);
-
-/* Update an entry to SPT_INVALID (invalidates the page). */
-void spt_invalidate(struct spt_entry *spte);
 
 /* Look up a page table entry. */
 struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key);

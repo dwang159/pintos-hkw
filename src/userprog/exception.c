@@ -7,6 +7,7 @@
 #include "threads/thread.h"
 #include "syscall.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
@@ -150,40 +151,56 @@ static void page_fault(struct intr_frame *f) {
 #else /* VM */
     void *kpage;
     struct thread *t = thread_current();
-    if (fault_addr >= f->esp - STACK_HEURISTIC &&
-            fault_addr >= PHYS_BASE - MAX_STACK &&
-            fault_addr < PHYS_BASE) {
-        kpage = frame_get(pg_round_down(fault_addr), true);
-        struct spt_entry *se = spt_create_entry(spt_get_key(fault_addr));
-        spt_insert(t->spt, se);
-    } else {
-        struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
-        if (!spte) {
-            kill(f);
+    struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
+    if (!spte) {
+        // Check if a stack page should be allocated.
+        if (fault_addr >= f->esp - STACK_HEURISTIC &&
+                fault_addr >= PHYS_BASE - MAX_STACK &&
+                fault_addr < PHYS_BASE) {
+            kpage = frame_get(fault_addr, true);
+            spte = spt_create_entry(spt_get_key(fault_addr));
+            // Stack pages should be written to swap if evicted.
+            spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
+            spt_insert(t->spt, spte);
         } else {
-            switch (spte->type) {
-                case SPT_ZERO:
-                    kpage = frame_get(fault_addr, true);
-                    memset(kpage, 0, PGSIZE);
-                case SPT_FILESYS:
-                    kpage = frame_get(fault_addr, spte->data.fdata.writable);
-                    int page_read_bytes = spte->data.fdata.read_bytes;
-                    int page_zero_bytes = spte->data.fdata.zero_bytes;
-                    struct file * file = spte->data.fdata.file;
+            // Invalid access.
+            kill(f);
+        }
+    } else {
+        int page_read_bytes;
+        int page_zero_bytes;
+        struct file *file;
+        // Allocate a kernel page to use.
+        kpage = frame_get(fault_addr, spte->writable);
+        switch (spte->read_status) {
+            // Get the data from the appropriate location.
+            case SPT_ZERO:
+                memset(kpage, 0, PGSIZE);
+                spt_update_status(spte, SPT_INVALID, SPT_SWAP, spte->writable);
+                break;
+            case SPT_FILESYS:
+                page_read_bytes = spte->data.fdata.read_bytes;
+                page_zero_bytes = spte->data.fdata.zero_bytes;
+                file = spte->data.fdata.file;
 
-                    file_seek(file, spte->data.fdata.offset);
-                    /* Load this page. */
-                    if (file_read(file, kpage, page_read_bytes) !=
-                            (int) page_read_bytes) {
-                        palloc_free_page(kpage);
-                        sys_exit(-1);
-                    }
-                    /* Zero the proper bytes in the page */
-                    memset(kpage + page_read_bytes, 0, page_zero_bytes);
-                    break;
-                default:
+                file_seek(file, spte->data.fdata.offset);
+                /* Load this page. */
+                if (file_read(file, kpage, page_read_bytes) !=
+                        (int) page_read_bytes) {
+                    palloc_free_page(kpage);
                     sys_exit(-1);
-            }
+                }
+                /* Zero the proper bytes in the page */
+                memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
+                // Update the page status. If not writable, it should be
+                // written to swap on eviction. Otherwise write back to file.
+                spt_update_status(spte, SPT_FILESYS,
+                        SPT_FILESYS, spte->writable);
+                break;
+            case SPT_INVALID:
+            default:
+                sys_exit(-1);
         }
     }
 #endif /* No-VM/ VM */
