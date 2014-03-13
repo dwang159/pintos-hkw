@@ -133,8 +133,8 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-    bool not_present; /* True: not-present page, false: writing r/o page. */
 #ifndef VM
+    bool not_present; /* True: not-present page, false: writing r/o page. */
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
 
@@ -202,7 +202,6 @@ static void page_fault(struct intr_frame *f) {
                         SPT_FILESYS, spte->writable);
                 break;
             case SPT_INVALID:
-            printf("faulting here\n");
             default:
                 sys_exit(-1);
         }
