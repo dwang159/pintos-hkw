@@ -421,13 +421,11 @@ mapid_t sys_mmap(int fd, void *addr) {
     size_t page_read_bytes;
     size_t page_zero_bytes;
     off_t ofs = 0;
-    bool writable = true;
     while (read_bytes > 0 || zero_bytes > 0) {
         page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         page_zero_bytes = PGSIZE - page_read_bytes;
         se = spt_create_entry(spt_get_key(addr));
-        spt_update_filesys(se, file, ofs, page_read_bytes,
-                page_zero_bytes, writable);
+        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes);
         spt_insert(curr->spt, se);
 
         /* Advance */
@@ -442,6 +440,6 @@ mapid_t sys_mmap(int fd, void *addr) {
 /* Unmaps the file-memory correspondence associated with
  * `mapping.` */
 void sys_munmap(mapid_t mapping) {
- printf("suckage\n");
+     printf("suckage: %d\n", mapping);
 }
 #endif /* VM */

@@ -5,7 +5,7 @@
 #include "threads/malloc.h"
 #include "vm/fmap.h"
 
-static unsigned key_giver = 0;
+static mapid_t key_giver = 0;
 
 /* Create a new mapping table. Returns a null pointer if memory
  * allocation fails.
@@ -20,14 +20,14 @@ struct fmap_table *fmap_create_table() {
     return fmap;
 }
 
-unsigned fmap_generate_key(void) {
+mapid_t fmap_generate_id(void) {
     // Increment the global key_giver so that it doesn't repeat itself.
     return key_giver++;
 }
 
 /* Create a new mapping table entry. Returns a null pointer if
  * memory allocation fails.  */
-struct fmap_entry *fmap_create_entry(unsigned key) {
+struct fmap_entry *fmap_create_entry(mapid_t key) {
     struct fmap_entry *fme;
     fme = (struct fmap_entry *) malloc(sizeof(struct fmap_entry));
     if (!fme)
@@ -44,7 +44,7 @@ void fmap_insert(struct fmap_table *fmap, struct fmap_entry *fme) {
 }
 
 /* Look up a mapping table entry. Returns NULL if no entry exists. */
-struct fmap_entry *fmap_lookup(struct fmap_table *fmap, unsigned key) {
+struct fmap_entry *fmap_lookup(struct fmap_table *fmap, mapid_t key) {
     struct hash_elem *e;
     struct fmap_entry *fme;
 
@@ -64,7 +64,7 @@ struct fmap_entry *fmap_lookup(struct fmap_table *fmap, unsigned key) {
 }
 
 /* Removes an entry from the mapping table. */
-void fmap_remove(struct fmap_table *fmap, unsigned key) {
+void fmap_remove(struct fmap_table *fmap, mapid_t key) {
     struct fmap_entry *fme;
 
     ASSERT(fmap);

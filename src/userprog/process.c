@@ -339,9 +339,8 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     t->pagedir = pagedir_create();
     t->spt = spt_create_table();
     t->fmap = fmap_create_table();
-    if (t->pagedir == NULL || t->spt == NULL || f->map == NULL)
+    if (t->pagedir == NULL || t->spt == NULL || t->fmap == NULL)
         goto done;
-
     process_activate();
 
     /* Open executable file. */
@@ -427,7 +426,6 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     *eip = (void (*)(void)) ehdr.e_entry;
 
     success = true;
-
 done:
     /* We arrive here whether the load is successful or not. */
     //file_close(file);
@@ -493,32 +491,33 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
     error occurs. */
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
-                         bool writable) {
+                         bool writable UNUSED) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
 
     file_seek(file, ofs);
     while (read_bytes > 0 || zero_bytes > 0) {
+        printf("load one\n");
         /* Calculate how to fill this page.
            We will read PAGE_READ_BYTES bytes from FILE
            and zero the final PAGE_ZERO_BYTES bytes. */
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        struct thread *curr = thread_current();
-        struct spt_entry *spte = spt_create_entry(spt_get_key(upage));
-        // Should be read from file.
-        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, writable);
-        spt_update_filesys(spte, file, ofs, page_read_bytes, page_zero_bytes);
-        spt_insert(curr->spt, spte);
+        struct thread * curr = thread_current();
+        struct spt_entry *se = spt_create_entry(spt_get_key(upage));
+        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes);
+        spt_insert(curr->spt, se);
 
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
         ofs += PGSIZE;
+        printf("and another\n");
     }
+    printf("couldn't do it\n");
     return true;
 }
 
@@ -532,8 +531,6 @@ static bool setup_stack(void **esp) {
     // Create a spt entry
     struct spt_entry *spte = spt_create_entry(
             spt_get_key((void *) PHYS_BASE - PGSIZE));
-    // Shouldn't need to be read, but should be written to swap if evicted.
-    spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
     spt_insert(thread_current()->spt, spte);
 
     if (kpage != NULL) {

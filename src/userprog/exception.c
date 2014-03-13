@@ -117,9 +117,6 @@ static void kill(struct intr_frame *f) {
     description of "Interrupt 14--Page Fault Exception (#PF)" in
     [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame *f) {
-    bool not_present;  /* True: not-present page, false: writing r/o page. */
-    bool write;        /* True: access was write, false: access was read. */
-    bool user;         /* True: access by user, false: access by kernel. */
     void *fault_addr;  /* Fault address. */
 
     /* Obtain faulting address, the virtual address that was accessed to cause
@@ -136,12 +133,16 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
+#ifndef VM
+    bool not_present; /* True: not-present page, false: writing r/o page. */
+    bool write;       /* True: access was write, false: access was read. */
+    bool user;        /* True: access by user, false: access by kernel. */
+
     /* Determine cause. */
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
-#ifndef VM
     printf("Page fault at %p: %s error %s page in %s context.\n",
            fault_addr,
            not_present ? "not present" : "rights violation",

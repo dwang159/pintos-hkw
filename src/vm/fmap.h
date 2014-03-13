@@ -9,6 +9,7 @@
 
 #include <hash.h>
 
+typedef int mapid_t;
 
 /* File mapping data structure */
 struct fmap_table {
@@ -26,19 +27,19 @@ struct fmap_entry {
 struct fmap_table *fmap_create_table(void);
 
 /* Creates a unique key each time. */
-unsigned fmap_generate_key(void);
+mapid_t fmap_generate_id(void);
 
 /* Create a new page table entry. */
-struct fmap_entry *fmap_create_entry(unsigned key);
+struct fmap_entry *fmap_create_entry(mapid_t key);
 
 /* Insert an entry into the mapping table. */
 void fmap_insert(struct fmap_table *fmap, struct fmap_entry *fmape);
 
 /* Look up a mapping table entry. */
-struct fmap_entry *fmap_lookup(struct fmap_table *fmap, unsigned key);
+struct fmap_entry *fmap_lookup(struct fmap_table *fmap, mapid_t key);
 
 /* Remove an entry from the mapping table. */
-void fmap_remove(struct fmap_table *fmap, unsigned key);
+void fmap_remove(struct fmap_table *fmap, mapid_t key);
 
 /* Returns true if e1 < e2. */
 bool fmap_hash_less_func(

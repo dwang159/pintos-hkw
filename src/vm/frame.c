@@ -21,11 +21,8 @@ struct frame_table ft;
 /* Lock for the frame table. */
 struct lock ft_lock;
 
-/* Page eviction policy signature. */
-typedef struct frame *policy_t(void);
-
 /* Global page eviction policy. */
-policy_t *evict;
+struct frame_entry *(*evict)(void);
 
 /* Page eviction policies. */
 struct frame_entry *random_policy(void);

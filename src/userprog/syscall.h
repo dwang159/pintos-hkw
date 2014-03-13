@@ -5,7 +5,9 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 
-typedef int mapid_t;
+#ifdef VM
+#include "vm/fmap.h"
+#endif /* VM */
 
 void syscall_init(void);
 
