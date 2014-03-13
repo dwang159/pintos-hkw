@@ -13,6 +13,11 @@
 #include "userprog/process.h"
 #include "userprog/syscall.h"
 
+#ifdef VM
+#include "vm/page.h"
+#include "vm/fmap.h"
+#include "vm/frame.h"
+#endif /* VM */
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
  */
@@ -403,8 +408,9 @@ mapid_t sys_mmap(int fd, void *addr) {
     }
 
     struct file *file = thread_current()->files.data[fd];
+    struct file *hidden= file_reopen(file);
     lock_acquire(&filesys_lock);
-    off_t len = file_length(file);
+    off_t len = file_length(hidden);
     lock_release(&filesys_lock);
 
     // Doesn't bother with zero length files.
@@ -426,12 +432,15 @@ mapid_t sys_mmap(int fd, void *addr) {
     size_t page_read_bytes;
     size_t page_zero_bytes;
     off_t ofs = 0;
+    unsigned num_pages = 0;
     while (read_bytes > 0 || zero_bytes > 0) {
+        num_pages++;
         page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         page_zero_bytes = PGSIZE - page_read_bytes;
         se = spt_create_entry(spt_get_key(addr));
         spt_update_status(se, SPT_FILESYS, SPT_FILESYS, true);
-        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes);
+        spt_update_filesys(se, hidden, ofs, page_read_bytes, 
+                page_zero_bytes);
         spt_insert(curr->spt, se);
 
         /* Advance */
@@ -441,7 +450,8 @@ mapid_t sys_mmap(int fd, void *addr) {
     }
     mapid_t key = fmap_generate_id();
     struct fmap_entry *fme = fmap_create_entry(key);
-    fmap_update(fme, fd, addr, (unsigned) len); 
+    // Need to keep the inode open even if the callee closes .
+    fmap_update(fme, fd, addr, hidden, num_pages); 
     fmap_insert(curr->fmap, fme);
     return key;
 }
@@ -449,6 +459,29 @@ mapid_t sys_mmap(int fd, void *addr) {
 /* Unmaps the file-memory correspondence associated with
  * `mapping.` */
 void sys_munmap(mapid_t mapping) {
-    // printf("suckage: %d\n", mapping);
+    struct thread *curr = thread_current();
+    struct fmap_entry *fme = fmap_lookup(curr->fmap, mapping);
+    void *uaddr = fme->addr;
+    ASSERT(pg_ofs(uaddr) == 0);
+    unsigned count = fme->num_pages;
+    unsigned key;
+    struct frame_entry *fe;
+    while(count--) {
+        void *kpage = pagedir_get_page(curr->pagedir, uaddr);
+        if (kpage) {
+            key = frame_get_key(kpage);
+            fe = frame_lookup(key);
+            frame_writeback(fe);
+            frame_remove(key);
+            pagedir_clear_page(curr->pagedir, uaddr);
+        }
+        key = spt_get_key(uaddr);
+        spt_remove(curr->spt, key);
+        uaddr += PGSIZE;
+    }
+    // Write back all the frames
+    // remove all from spt
+    //  
+    file_close(fme->hidden);
 }
 #endif /* VM */

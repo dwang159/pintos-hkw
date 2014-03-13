@@ -144,6 +144,12 @@ bool frame_hash_less_func(
     fe2 = hash_entry(e2, struct frame_entry, elem);
     return fe1->key < fe2->key;
 }
+/* Writes a frame table entry back to whence it came. */
+void frame_writeback(struct frame_entry *fe) {
+    fe++;
+    /* TODO */
+    return;
+}
 
 /* Evicts a random frame. */
 struct frame_entry *random_policy() {
