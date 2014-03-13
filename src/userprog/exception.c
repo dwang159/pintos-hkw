@@ -133,8 +133,8 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-#ifndef VM
     bool not_present; /* True: not-present page, false: writing r/o page. */
+#ifndef VM
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
 
@@ -150,6 +150,8 @@ static void page_fault(struct intr_frame *f) {
            user ? "user" : "kernel");
     kill(f);
 #else /* VM */
+    if (!not_present)
+        kill(f);
     void *kpage;
     struct thread *t = thread_current();
     struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));

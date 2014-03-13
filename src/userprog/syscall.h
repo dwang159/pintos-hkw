@@ -34,6 +34,7 @@ void sys_munmap(mapid_t mapping);
 
 /* Checks if memory address is valid. */
 bool mem_valid(const void *addr);
+bool mem_writable(const void *addr);
 
 /* Checks file descriptor. */
 bool fd_valid(int fd);
