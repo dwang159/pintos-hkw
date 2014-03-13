@@ -1,5 +1,5 @@
-#ifndef VM_MAP_H
-#define VM_MAP_H
+#ifndef VM_FMAP_H
+#define VM_FMAP_H
 
 /* File mapping table.
  *
@@ -11,11 +11,11 @@
 
 
 /* File mapping data structure */
-struct map_table {
+struct fmap_table {
     struct hash data;
 };
 
-struct map_entry {
+struct fmap_entry {
     void *addr;
     unsigned size;
     unsigned key;
@@ -23,27 +23,27 @@ struct map_entry {
 };
 
 /* Create a new mapping table. */
-struct map_table *map_create_table(void);
+struct fmap_table *fmap_create_table(void);
 
 /* Create a new page table entry. */
-struct map_entry *map_create_entry(unsigned key);
+struct fmap_entry *fmap_create_entry(unsigned key);
 
 /* Insert an entry into the mapping table. */
-void map_insert(struct map_table *map, struct map_entry *mape);
+void fmap_insert(struct fmap_table *fmap, struct fmap_entry *fmape);
 
 /* Look up a mapping table entry. */
-struct map_entry *map_lookup(struct map_table *map, unsigned key);
+struct fmap_entry *fmap_lookup(struct fmap_table *fmap, unsigned key);
 
 /* Remove an entry from the mapping table. */
-void map_remove(struct map_table *map, unsigned key);
+void fmap_remove(struct fmap_table *fmap, unsigned key);
 
 /* Returns true if e1 < e2. */
-bool map_hash_less_func(
+bool fmap_hash_less_func(
     const struct hash_elem *e1,
     const struct hash_elem *e2,
     void *aux);
 
-/* Hash function for the mapping table. */
-unsigned map_hash(const struct hash_elem *e, void *aux);
+/* Hash function for the fmapping table. */
+unsigned fmap_hash(const struct hash_elem *e, void *aux);
 
-#endif /*VM_MAP_H */
+#endif /*VM_FMAP_H */
