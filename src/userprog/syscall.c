@@ -179,6 +179,11 @@ bool mem_valid(const void *addr) {
 #endif
 }
 
+bool mem_writable(const void *addr) {
+    return (mem_valid(addr) && spt_lookup(thread_current()->spt, 
+            spt_get_key(addr))->writable);
+}
+
 /* Checks if the file descriptor is valid. */
 bool fd_valid(int fd) {
     struct thread *curr = thread_current();
@@ -307,7 +312,7 @@ int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
     struct thread *curr = thread_current();
 
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
+    if (!mem_writable(buffer) || !mem_writable(buffer + size - 1) ||
             fd == STDOUT_FILENO || !fd_valid(fd)){
         sys_exit(-1);
     }
