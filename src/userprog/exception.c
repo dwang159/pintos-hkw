@@ -134,12 +134,11 @@ static void page_fault(struct intr_frame *f) {
     page_fault_cnt++;
 
     bool not_present; /* True: not-present page, false: writing r/o page. */
+    not_present = (f->error_code & PF_P) == 0;
 #ifndef VM
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
 
-    /* Determine cause. */
-    not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
@@ -202,7 +201,6 @@ static void page_fault(struct intr_frame *f) {
                         SPT_FILESYS, spte->writable);
                 break;
             case SPT_INVALID:
-            printf("faulting here\n");
             default:
                 sys_exit(-1);
         }

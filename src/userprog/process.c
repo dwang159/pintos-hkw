@@ -498,7 +498,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
     file_seek(file, ofs);
     while (read_bytes > 0 || zero_bytes > 0) {
-        printf("load one\n");
         /* Calculate how to fill this page.
            We will read PAGE_READ_BYTES bytes from FILE
            and zero the final PAGE_ZERO_BYTES bytes. */
@@ -515,9 +514,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
         ofs += PGSIZE;
-        printf("and another\n");
     }
-    printf("couldn't do it\n");
     return true;
 }
 
@@ -539,7 +536,6 @@ static bool setup_stack(void **esp) {
         palloc_free_page(kpage);
         return false;
     }
-    printf("stack is called\n");
     return true;
 }
 
