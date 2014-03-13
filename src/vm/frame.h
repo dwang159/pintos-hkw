@@ -3,6 +3,7 @@
 
 #include <list.h>
 #include <hash.h>
+#include "vm/page.h"
 
 /* Contains all elements of the frame table. */
 struct frame_table {
@@ -18,8 +19,10 @@ struct frame_entry {
     // and the key is retrieved using frame_get_key().
     unsigned key;
 
-    // Additional data for this page.
-    // TODO
+    // Thread and key for the supplemental page table associated with
+    // this frame.
+    struct thread *owner;
+    unsigned ukey;
 };
 
 /* Initialize the global frame table. */
