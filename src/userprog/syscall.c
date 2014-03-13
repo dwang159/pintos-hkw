@@ -395,14 +395,14 @@ void sys_close(int fd)
 /** Project 5 handlers */
 /* Mays a file specified by fdinto consecutive
  * virtual pages starting at addr. */
-mapid_t sys_mmap(int fd, void *addr) {
+mapid_t sys_mmap(int fd, void *uaddr) {
     // Check that the address is in user memory.
-    if  (addr == NULL || !is_user_vaddr(addr)) {
+    if  (uaddr == NULL || !is_user_vaddr(uaddr)) {
         sys_exit(-1);
     }
 
     // Check that the address is page aligned
-    if (pg_ofs(addr)) {
+    if (pg_ofs(uaddr)) {
         return -1;
         sys_exit(-1);
     }
@@ -418,14 +418,38 @@ mapid_t sys_mmap(int fd, void *addr) {
         return -1;
     }
     // Fail if the file is too large to fit in user memory.
-    if  (!is_user_vaddr(addr + len)) {
+    if  (!is_user_vaddr(uaddr + len)) {
         sys_exit(-1);
     }
 
+    // Can't open an invalid file.
     if (!fd_valid(fd)) {
         return -1;
     }
+
     struct thread *curr = thread_current();
+
+    struct hash_iterator i;
+        hash_first (&i, &curr->fmap->data);
+    // Check that there is no overlap with currently mapped files.
+    while (hash_next (&i)) {
+        struct fmap_entry *fme = hash_entry(hash_cur(&i), struct fmap_entry,
+                elem);
+        void *old_beg = fme->addr;
+        void *old_end = fme->addr + PGSIZE *fme->num_pages;
+        void *new_beg = uaddr;
+        void *new_end = (void *)ROUND_UP((int) uaddr + len, PGSIZE);
+        /* If the new section starts before the end of the first,
+         * make sure it ends before the first begins */
+        if (new_beg < old_end && new_end >= old_beg) {
+            return -1;
+        }
+        /* Likewise in the other direction */
+        if (old_beg < new_end && new_end >= old_beg) {
+            return -1;
+        }
+    }
+
     struct spt_entry *se;
     uint32_t read_bytes = (uint32_t) len;
     uint32_t zero_bytes = ROUND_UP(read_bytes, PGSIZE) - read_bytes;
@@ -437,7 +461,7 @@ mapid_t sys_mmap(int fd, void *addr) {
         num_pages++;
         page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         page_zero_bytes = PGSIZE - page_read_bytes;
-        se = spt_create_entry(spt_get_key(addr));
+        se = spt_create_entry(spt_get_key(uaddr));
         spt_update_status(se, SPT_FILESYS, SPT_FILESYS, true);
         spt_update_filesys(se, hidden, ofs, page_read_bytes, 
                 page_zero_bytes);
@@ -447,12 +471,14 @@ mapid_t sys_mmap(int fd, void *addr) {
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         ofs += PGSIZE;
+        uaddr += PGSIZE;
     }
     mapid_t key = fmap_generate_id();
     struct fmap_entry *fme = fmap_create_entry(key);
     // Need to keep the inode open even if the callee closes .
-    fmap_update(fme, fd, addr, hidden, num_pages); 
+    fmap_update(fme, fd, uaddr, hidden, num_pages);
     fmap_insert(curr->fmap, fme);
+    printf("inserted okay\n");
     return key;
 }
 
@@ -466,6 +492,7 @@ void sys_munmap(mapid_t mapping) {
     unsigned count = fme->num_pages;
     unsigned key;
     struct frame_entry *fe;
+    printf("here something goes wrong\n");
     while(count--) {
         void *kpage = pagedir_get_page(curr->pagedir, uaddr);
         if (kpage) {
@@ -479,9 +506,11 @@ void sys_munmap(mapid_t mapping) {
         spt_remove(curr->spt, key);
         uaddr += PGSIZE;
     }
+    printf("here something goes wrong\n");
     // Write back all the frames
     // remove all from spt
     //  
     file_close(fme->hidden);
+    printf("here something goes wrong\n");
 }
 #endif /* VM */
