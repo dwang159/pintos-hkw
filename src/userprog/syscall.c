@@ -181,7 +181,7 @@ bool mem_valid(const void *addr) {
 }
 
 bool mem_writable(const void *addr) {
-    return (mem_valid(addr) && spt_lookup(thread_current()->spt, 
+    return (mem_valid(addr) && spt_lookup(thread_current()->spt,
             spt_get_key(addr))->writable);
 }
 

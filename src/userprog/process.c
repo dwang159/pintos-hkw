@@ -522,13 +522,14 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 /*! Create a minimal stack by mapping a zeroed page at the top of
     user virtual memory. */
 static bool setup_stack(void **esp) {
-    uint8_t *kpage;
+    void *kpage;
 
     // Get a frame for the stack
     kpage = frame_get((void *) PHYS_BASE - PGSIZE, true);
     // Create a spt entry
     struct spt_entry *spte = spt_create_entry(
             spt_get_key((void *) PHYS_BASE - PGSIZE));
+    spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
     spt_insert(thread_current()->spt, spte);
 
     if (kpage != NULL) {
