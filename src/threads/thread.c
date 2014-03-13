@@ -13,7 +13,6 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "threads/malloc.h"
-#include "vm/page.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
