@@ -200,6 +200,7 @@ static void page_fault(struct intr_frame *f) {
                         SPT_FILESYS, spte->writable);
                 break;
             case SPT_INVALID:
+            printf("faulting here\n");
             default:
                 sys_exit(-1);
         }

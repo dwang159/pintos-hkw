@@ -539,6 +539,7 @@ static bool setup_stack(void **esp) {
         palloc_free_page(kpage);
         return false;
     }
+    printf("stack is called\n");
     return true;
 }
 
