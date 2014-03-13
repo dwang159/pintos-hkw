@@ -62,12 +62,18 @@ struct frame_entry *frame_create_entry(unsigned key) {
         return NULL;
 
     fe->key = key;
+    fe->owner = thread_current();
+    if (!fe->owner) {
+        PANIC("Init\n");
+    }
     return fe;
 }
 
 /* Insert an entry into the frame table. */
 void frame_insert(struct frame_entry *fe) {
     ASSERT(fe);
+    ASSERT(fe->owner);
+    ASSERT(fe->key);
     hash_insert(&ft.data, &fe->elem);
 }
 
@@ -79,6 +85,7 @@ struct frame_entry *frame_lookup(unsigned key) {
     // Create a temporary struct with the same key to compare.
     cmp = frame_create_entry(key);
     ASSERT(cmp);
+    ASSERT(cmp->owner);
     e = hash_find(&ft.data, &cmp->elem);
     free(cmp);
 
@@ -93,6 +100,7 @@ void frame_remove(unsigned key) {
 
     cmp = frame_create_entry(key);
     ASSERT(cmp);
+    ASSERT(cmp->owner);
     hash_delete(&ft.data, &cmp->elem);
     free(cmp);
 }
@@ -116,12 +124,15 @@ void *frame_get(void *uaddr, bool writable) {
     } else {
         // Choose a page to evict.
         fe = evict();
+        ASSERT(fe->owner);
         key = fe->key;
         kpage = (void *) key;
+        // Choose a page to evict.
         // If necessary, write back the contents of this frame.
         frame_writeback(fe, false);
         // Unmap this page.
         pagedir_clear_page(fe->owner->pagedir, (void *) fe->ukey);
+        frame_remove(key);
         // Old page is no longer needed.
         free(fe);
     }
@@ -130,6 +141,7 @@ void *frame_get(void *uaddr, bool writable) {
     ASSERT(fe);
     // Set the owner thread/spt.
     fe->owner = thread_current();
+    ASSERT(fe->owner);
     fe->ukey = ukey;
     frame_insert(fe);
     // Associate the user page with the returned kpage.
@@ -152,6 +164,7 @@ unsigned frame_hash_func(const struct hash_elem *e, void *aux UNUSED) {
     struct frame_entry *fe;
     ASSERT(e);
     fe = hash_entry(e, struct frame_entry, elem);
+    ASSERT(fe->owner);
     return hash_int((int) fe->key);
 }
 
@@ -164,6 +177,8 @@ bool frame_hash_less_func(
     ASSERT(e1 && e2);
     fe1 = hash_entry(e1, struct frame_entry, elem);
     fe2 = hash_entry(e2, struct frame_entry, elem);
+    ASSERT(fe1->owner);
+    ASSERT(fe2->owner);
     return fe1->key < fe2->key;
 }
 
@@ -176,14 +191,19 @@ struct frame_entry *evict_first() {
     hash_first(&hi, &ft.data);
     while (hash_next(&hi)) {
         fe = hash_entry(hash_cur(&hi), struct frame_entry, elem);
+        ASSERT(fe->owner);
         // Check if accessed.
-        if (!pagedir_is_accessed(fe->owner->pagedir, (void *) fe->ukey))
+        if (!pagedir_is_accessed(fe->owner->pagedir, (void *) fe->ukey)) {
             return fe;
-        else
-            pagedir_set_accessed(fe->owner->pagedir, (void *) fe->ukey, false);
+        }
+        else {
+            pagedir_set_accessed(fe->owner->pagedir, (void *) fe->ukey, 
+                    false);
+        }
     }
     // If none were found, return the last one we saw.
     ASSERT(fe);
+    ASSERT(fe->owner);
     return fe;
 }
 
@@ -194,6 +214,7 @@ void frame_writeback(struct frame_entry *fe, bool full_exit) {
     ASSERT(fe);
     kpage = (void *) fe->key;
     upage = (void *) fe->ukey;
+    ASSERT(fe->owner);
     spte = spt_lookup(fe->owner->spt, fe->ukey);
     size_t slotid;
     switch (spte->write_status) {
