@@ -2,12 +2,21 @@
  * Functions for managing the supplemental page table.
  */
 
-#include "page.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <debug.h>
 #include "threads/pte.h"
 #include "threads/malloc.h"
+#include "vm/page.h"
+
+/* Hash table functions for the supplemental page table. */
+bool spt_hash_less_func(
+    const struct hash_elem *e1,
+    const struct hash_elem *e2,
+    void *aux);
+unsigned spt_hash_func(const struct hash_elem *e, void *aux);
+
+/* ===== Function Definitions ===== */
 
 /* Create a new page table. Returns a null pointer if memory
  * allocation fails.
@@ -16,7 +25,8 @@ struct spt_table *spt_create_table() {
     struct spt_table *spt;
 
     spt = (struct spt_table *) malloc(sizeof(struct spt_table));
-    if (!spt || !hash_init(&spt->data, &spt_hash, &spt_hash_less_func, NULL))
+    if (!spt || !hash_init(&spt->data, &spt_hash_func,
+                &spt_hash_less_func, NULL))
         return NULL;
     return spt;
 }
@@ -106,7 +116,7 @@ void spt_remove(struct spt_table *spt, unsigned key) {
 }
 
 /* Hashes a pointer. */
-unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
+unsigned spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
     struct spt_entry *spte;
     ASSERT(e);
     spte = hash_entry(e, struct spt_entry, elem);
@@ -127,9 +137,7 @@ bool spt_hash_less_func(const struct hash_elem *e1,
     struct spt_entry *spte1, *spte2;
 
     ASSERT(e1 && e2);
-
     spte1 = hash_entry(e1, struct spt_entry, elem);
     spte2 = hash_entry(e2, struct spt_entry, elem);
-
     return spte1->key < spte2->key;
 }

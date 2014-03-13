@@ -141,7 +141,7 @@ void thread_start(void) {
     sema_init(&idle_started, 0);
     thread_create("idle", PRI_MIN, idle, &idle_started);
 
-    frame_table_init();
+    frame_init();
 
     /* Start preemptive thread scheduling. */
     intr_enable();

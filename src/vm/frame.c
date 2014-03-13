@@ -1,274 +1,161 @@
-#include "userprog/process.h"
-#include "vm/frame.h"
-#include "vm/page.h"
-#include <devices/timer.h>
-#include <lib/random.h>
-#include "threads/pte.h"
+/*
+ * Functions for managing the frame table.
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <debug.h>
 #include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/pte.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include "userprog/syscall.h"
-#include <stdlib.h>
-#include <stdio.h>
+#include "vm/frame.h"
 
-typedef uint32_t flags_t;
-static int ft_num_free = NUM_FRAMES;
+/* Global frame table. */
+struct frame_table ft;
 
-hash_hash_func frame_hash;
-hash_less_func frame_less;
+/* Lock for the frame table. */
+struct lock ft_lock;
 
-/* Takes the hash of the frame number. */
-unsigned frame_hash(const struct hash_elem *p_, void *aux UNUSED) {
-    const struct frame *f = hash_entry(p_, struct frame, hash_elem);
-    return hash_int((int) f->frame_no);
-}
+/* Page eviction policy signature. */
+typedef struct frame *policy_t(void);
 
-bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_,
-                void *aux UNUSED) {
-    const struct frame *a = hash_entry(a_, struct frame, hash_elem);
-    const struct frame *b = hash_entry(b_, struct frame, hash_elem);
-    return a->frame_no < b->frame_no;
-}
+/* Global page eviction policy. */
+policy_t *evict;
 
-/* Initializes the frame table for the process that has
- * just started. */
+/* Page eviction policies. */
+struct frame_entry *random_policy(void);
+struct frame_entry *lru_policy(void);
 
-void frame_table_init() {
-    list_init(&ft_list);
-    if (!hash_init(&ft_hash, frame_hash, frame_less, NULL)) {
-        PANIC("Could not create frame hash table.\n");
-    }
+/* Hash table functions for the frame table. */
+unsigned frame_hash_func(const struct hash_elem *e, void *aux);
+bool frame_hash_less_func(
+        const struct hash_elem *e1,
+        const struct hash_elem *e2,
+        void *aux);
+
+/* ===== Function Definitions ===== */
+
+/* Initialize the global frame table. */
+void frame_init(void) {
+    // Initialize the hash table.
+    if (!hash_init(&ft.data, &frame_hash_func, &frame_hash_less_func, NULL))
+        PANIC("Could not initialize frame table\n");
+
+    // Initialize the lock.
     lock_init(&ft_lock);
+
+    // Set global page eviction policy.
+    evict = &random_policy;
 }
 
-void frame_table_destroy() {
-    lock_acquire(&ft_lock);
-    /* TODO: Be a bit more careful about freeing resources? */
-    hash_destroy(&ft_hash, NULL);
-}
+/* Crete a frame table entry (does not insert). */
+struct frame_entry *frame_create_entry(unsigned key) {
+    struct frame_entry *fe;
 
-struct frame *frame_create_entry(frame_number_t frame_no) {
-    struct frame *fp;
-    fp = (struct frame *) malloc(sizeof(struct spt_entry));
-    if (!fp)
+    fe = (struct frame_entry *) malloc(sizeof(struct frame_entry));
+    if (!fe)
         return NULL;
-    fp->frame_no = frame_no;
-    return fp;
+
+    fe->key = key;
+    return fe;
 }
 
-/* Returns an array to the pageinfos associated with the frame number. */
-pageinfo *frame_table_lookup(frame_number_t frame_no) {
-    struct frame *fp;
-    fp = find_frame(frame_no);
-    if (fp != NULL) {
-        return fp->pages;
-    } else {
+/* Insert an entry into the frame table. */
+void frame_insert(struct frame_entry *fe) {
+    ASSERT(fe);
+    hash_insert(&ft.data, &fe->elem);
+}
+
+/* Look up a frame table entry. */
+struct frame_entry *frame_lookup(unsigned key) {
+    struct frame_entry *cmp;
+    struct hash_elem *e;
+
+    // Create a temporary struct with the same key to compare.
+    cmp = frame_create_entry(key);
+    ASSERT(cmp);
+    e = hash_find(&ft.data, &cmp->elem);
+    free(cmp);
+
+    if (!e)
         return NULL;
-    }
+    return hash_entry(e, struct frame_entry, elem);
 }
 
-struct frame *find_frame(frame_number_t frame_no) {
-    struct frame f;
-    struct frame *fp;
-    struct hash_elem *he;
-    lock_acquire(&ft_lock);
-    f.frame_no = frame_no;
-    he = hash_find(&ft_hash, &f.hash_elem);
-    if (he != NULL) {
-        fp = hash_entry(he, struct frame, hash_elem);
-        lock_release(&ft_lock);
-        return fp;
-    } else {
-        lock_release(&ft_lock);
-        return NULL;
-    }
+/* Remove an entry from the frame table. */
+void frame_remove(unsigned key) {
+    struct frame_entry *cmp;
+
+    cmp = frame_create_entry(key);
+    ASSERT(cmp);
+    hash_delete(&ft.data, &cmp->elem);
+    free(cmp);
 }
 
-/* Adds or removes a page to the array associated with that frame in
- * the frame table. */
-void frame_table_add_vpage(frame_number_t frame_no, uint32_t pte) {
-    lock_acquire(&ft_lock);
-    struct frame *fp = find_frame(frame_no);
-    bool found = false;
-    int i;
-    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
-        if (fp->pages[i].pte != 0)
-            continue;
-        else {
-            fp->pages[i].pte = pte;
-            fp->pages[i].owner = thread_tid();
-            found = true;
-            break;
-        }
-    }
-    lock_release(&ft_lock);
-    ASSERT(found);
-}
+/* Returns a free frame, evicting one if necessary. */
+void *frame_get(void *uaddr, bool writeable) {
+    struct frame_entry *fe;
+    unsigned key = frame_get_key(uaddr);
+    void *upage;
 
-void frame_table_rem_vpage(frame_number_t frame_no, uint32_t pte) {
-    lock_acquire(&ft_lock);
-    struct frame *fp = find_frame(frame_no);
-    int i;
-    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
-        if (fp->pages[i].pte == pte) {
-            fp->pages[i].pte = 0;
-            return;
-        }
-    }
-    lock_release(&ft_lock);
-}
-
-void frame_table_set_flags(frame_number_t frame_no, flags_t flags) {
-    printf("frame_table_set_flags called with %p\n", frame_no);
-    printf("Attempted flags were %d\n", flags);
-    printf("Error: not implemented\n");
-}
-
-flags_t frame_table_get_flags(frame_number_t frame_no) {
-    printf("frame_table_get_flags called with %p\n", frame_no);
-    printf("Error: not implemented\n");
-    return -1;
-}
-
-/* Evicts the frame decided by the policy pol, and returns that
- * frame number. Needs to clear the entry in the frame table,
- * the page table, move the contents into swap or write it back to
- * the file that it belongs to. */
-void * frame_get(void *uaddr, bool writable) {
-    struct frame *fp;
-    uint32_t pte;
-    frame_number_t frame_no;
     ASSERT(is_user_vaddr(uaddr));
+    upage = (void *) key;
+    // Try to get a page.
     lock_acquire(&ft_lock);
     void *kpage = palloc_get_page(PAL_USER);
-    ASSERT(is_kernel_vaddr(kpage));
     if (kpage) {
-        frame_no = (frame_number_t) kpage;
-        pte = pte_create_user(kpage, writable);
-        fp = frame_create_entry(frame_no);
-        hash_insert(&ft_hash, &(fp->hash_elem));
-        install_page(uaddr, kpage, writable);
+        fe = frame_create_entry(key);
+        ASSERT(fe);
+        frame_insert(fe);
+        install_page(upage, kpage, writeable);
     } else {
-        PANIC("No evicting");
-        fp = random_frame();
-        if (fp->dirty) {
-            frame_writeback(fp);
-        }
-        uint32_t *pd = thread_current()->pagedir;
-        pagedir_clear_page(pd, (void *) pte);
-        frame_no = fp->frame_no;
+        PANIC("NO EVICTING\n");
     }
-    fp->pages[0].pte = pte;
-    fp->pages[0].owner = thread_tid();
-    fp->dirty = false;
     lock_release(&ft_lock);
     return kpage;
 }
 
-/* Frees all frames associated with the exiting process. */
-void frame_free_all(void) {
-    tid_t curr = thread_tid();
-    struct hash_iterator i;
-    hash_first(&i, &ft_hash);
-    while (hash_next(&i)) {
-        struct frame *fp = hash_entry(hash_cur(&i),
-                                      struct frame,
-                                      hash_elem);
-        int i;
-        for (i = 0; i < PAGE_FRAME_RATIO; i++) {
-            if (fp-> pages[i].pte != 0 && fp->pages[i].owner == curr) {
-                uint32_t *pd = thread_current()->pagedir;
-                frame_writeback(fp);
-                pagedir_clear_page(pd, (void *)fp->pages[0].pte);
-                fp->pages[i].pte = 0;
-                ft_num_free++;
-            }
-        }
-    }
+/* Returns a key used to identify a frame entry. The key is simply
+ * the top bits of the address used to determine the frame, with all
+ * other bits zeroed out.
+ */
+unsigned frame_get_key(void *kaddr) {
+    return ((unsigned) kaddr) & (PDMASK | PTMASK);
 }
 
-/* Writes the frame back to the swap partition or to a file. */
-void frame_writeback(struct frame *fp) {
-    struct spt_table *curr_spt = thread_current()->spt;
-    int i;
-    unsigned key;
-    uint32_t *pd;
-    for (i = 0; i < PAGE_FRAME_RATIO; i++) {
-        if (fp->pages[i].pte != 0) {
-            key = spt_get_key((void *) fp->pages[i].pte);
-            struct spt_entry *se = spt_lookup(curr_spt, key);
-            pd = thread_current()->pagedir;
-            switch (se->type) {
-            case SPT_INVALID:
-                sys_exit(-1);
-                break;
-            case SPT_ZERO:
-                if (pagedir_is_dirty(pd, (void *)key)) {
-                    se->data.slot = swap_swalloc_and_write((void *) key);
-                    se->type = SPT_SWAP;
-                } else {
-                    spt_remove(curr_spt, key);
-                }
-                break;
-            case SPT_SWAP:
-                se->data.slot = swap_swalloc_and_write((void *) key);
-                pagedir_clear_page(pd, (void *)key);
-                break;
-            case SPT_FILESYS:
-                if (pagedir_is_dirty(pd, (void *)key)) {
-                    struct file *handle = se->data.fdata.file;
-                    off_t offset = se->data.fdata.offset;
-                    uintptr_t kpage = vtop((void *) key);
-                    file_write_at(handle, (void *) kpage, PGSIZE, offset);
-                }
-                break;
-            default:
-                PANIC("Memory corruption in SPT.\n");
-            }
-        }
-        void *page = pte_get_page(fp->pages[i].pte);
-        palloc_free_page(page);
-    }
+/* Hashes a hash element. */
+unsigned frame_hash_func(const struct hash_elem *e, void *aux UNUSED) {
+    struct frame_entry *fe;
+    ASSERT(e);
+    fe = hash_entry(e, struct frame_entry, elem);
+    return hash_int((int) fe->key);
 }
 
-/* Eviction policies. */
-struct frame *random_frame(void) {
-    random_init((unsigned) timer_ticks());
-    unsigned long num;
-    do {
-        num = random_ulong() % NUM_FRAMES;
-    } while (!VALID_FRAME_NO(num));
-    return find_frame((frame_number_t) num);
+/* Compares two hash elems. Returns true if e1 < e2. */
+bool frame_hash_less_func(
+        const struct hash_elem *e1,
+        const struct hash_elem *e2,
+        void *aux UNUSED) {
+    struct frame_entry *fe1, *fe2;
+    ASSERT(e1 && e2);
+    fe1 = hash_entry(e1, struct frame_entry, elem);
+    fe2 = hash_entry(e2, struct frame_entry, elem);
+    return fe1->key < fe2->key;
 }
 
-struct frame *lru_frame(void) {
-    /* This might be nonsensical. */
-    struct list_elem *e;
-    for(e = list_begin(&ft_list);
-          e != list_end(&ft_list);
-          e = list_next(e)) {
-        struct frame *f = list_entry(e, struct frame, list_elem);
-        pageinfo *pages_for_f = f->pages;
-        /* Iterate through the pages that map to the frame f,
-         * and say that the frame is dirty if any page is
-         * and accessed if any page is. */
-        bool accessed = false;
-        bool dirty = false;
-        int i;
-        uint32_t pte;
-        for (i = 0; i < PAGE_FRAME_RATIO; i++) {
-            pte = pages_for_f[i].pte;
-            pages_for_f[i].pte &= ~PTE_A; /* Turn off the accessed bit. */
-            accessed = accessed || (pte & PTE_A);
-            dirty = dirty || (pte & PTE_D);
-        }
-        if (accessed) {
-            continue;
-        }
-        f->dirty = dirty;
-        lock_release(&ft_lock);
-        return f;
-    }
+/* Evicts a random frame. */
+struct frame_entry *random_policy() {
+    // TODO
+    return NULL;
+}
+
+/* Evicts the last recently used frame. */
+struct frame_entry *lru_policy() {
+    // TODO
     return NULL;
 }

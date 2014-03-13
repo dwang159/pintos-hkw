@@ -56,7 +56,7 @@ struct spt_entry {
 /* Create a new page table. */
 struct spt_table *spt_create_table(void);
 
-/* Create a new page table entry. */
+/* Create a new page table entry (does not insert). */
 struct spt_entry *spt_create_entry(unsigned key);
 
 /* Insert an entry into the page table. */
@@ -67,7 +67,7 @@ void spt_update_zero(struct spt_entry *spte);
 
 /* Update an entry to SPT_FILESYS. */
 void spt_update_filesys(struct spt_entry *spte,
-                        struct file *file, off_t offset, 
+                        struct file *file, off_t offset,
                         int read_bytes, int zero_bytes, bool writable);
 
 /* Update an entry to SPT_SWAP. */
@@ -84,14 +84,5 @@ void spt_remove(struct spt_table *spt, unsigned key);
 
 /* Returns a key to look up an entry in the hash table given a uaddr. */
 unsigned spt_get_key(void *uaddr);
-
-/* Returns true if e1 < e2. */
-bool spt_hash_less_func(
-    const struct hash_elem *e1,
-    const struct hash_elem *e2,
-    void *aux);
-
-/* Hash function for the supplemental page table. */
-unsigned spt_hash(const struct hash_elem *e, void *aux);
 
 #endif /* VM_PAGE_H */
