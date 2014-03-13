@@ -140,6 +140,14 @@ static void page_fault(struct intr_frame *f) {
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
+#ifndef VM
+    printf("Page fault at %p: %s error %s page in %s context.\n",
+           fault_addr,
+           not_present ? "not present" : "rights violation",
+           write ? "writing" : "reading",
+           user ? "user" : "kernel");
+    kill(f);
+#else /* VM */
     void *kpage;
     struct thread *t = thread_current();
     if (fault_addr >= f->esp - STACK_HEURISTIC &&
@@ -187,4 +195,5 @@ static void page_fault(struct intr_frame *f) {
             }
         }
     }
+#endif /* No-VM/ VM */
 }
