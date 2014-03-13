@@ -531,7 +531,6 @@ static bool setup_stack(void **esp) {
             spt_get_key((void *) PHYS_BASE - PGSIZE));
     spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
     spt_insert(thread_current()->spt, spte);
-
     if (kpage != NULL) {
         *esp = PHYS_BASE;
     } else {
