@@ -156,9 +156,8 @@ static void page_fault(struct intr_frame *f) {
     struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
     if (!spte) {
         // Check if a stack page should be allocated.
-        if (fault_addr >= f->esp - STACK_HEURISTIC &&
-                fault_addr >= PHYS_BASE - MAX_STACK &&
-                fault_addr < PHYS_BASE) {
+        void *esp = is_user_vaddr(f->esp) ? f->esp : thread_current()->esp;
+        if (possibly_stack(esp, fault_addr)) {
             kpage = frame_get(fault_addr, true);
             spte = spt_create_entry(spt_get_key(fault_addr));
             // Stack pages should be written to swap if evicted.

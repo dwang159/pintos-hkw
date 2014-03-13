@@ -9,6 +9,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/exception.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
@@ -41,6 +42,7 @@ static void syscall_handler(struct intr_frame *f) {
     void *esp = f->esp;
     void *args;
     bool args_valid = true;
+    thread_current()->esp = esp;
 
     /* Check pointer validity */
     if (!check_args_1(esp, int)) {
@@ -186,8 +188,12 @@ bool mem_valid(const void *addr) {
 }
 
 bool mem_writable(const void *addr) {
-    return (mem_valid(addr) && spt_lookup(thread_current()->spt,
-            spt_get_key(addr))->writable);
+    if (mem_valid(addr)) {
+        unsigned key = spt_get_key(addr);
+        struct spt_entry *se = spt_lookup(thread_current()->spt, key);
+        return se && se->writable;
+    }
+    return false;
 }
 
 /* Checks if the file descriptor is valid. */
@@ -320,10 +326,14 @@ int sys_filesize(int fd) {
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
     struct thread *curr = thread_current();
-
-    if (!mem_writable(buffer) || !mem_writable(buffer + size - 1) ||
-            fd == STDOUT_FILENO || !fd_valid(fd)){
+    void *esp = thread_current()->esp;
+    if (fd == STDOUT_FILENO || !fd_valid(fd)) {
         sys_exit(-1);
+    }
+    if (!possibly_stack(esp, buffer)) {
+        if (!mem_writable(buffer) || !mem_writable(buffer + size - 1)) {
+            sys_exit(-1);
+        }
     }
 
     if (fd == STDIN_FILENO) {

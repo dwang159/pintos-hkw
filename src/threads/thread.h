@@ -127,9 +127,12 @@ struct thread {
     /**@{*/
 #endif
 
+#ifdef VM
     //Supplemental page table
     struct spt_table *spt;
     struct fmap_table *fmap;
+    void *esp;  /* esp of a syscall process. */
+#endif
     // File descriptor table.
     struct vector files;
 
