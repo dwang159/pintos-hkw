@@ -1,3 +1,4 @@
+#include <round.h>
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "devices/input.h"
@@ -385,8 +386,57 @@ void sys_close(int fd)
 /* Mays a file specified by fdinto consecutive
  * virtual pages starting at addr. */
 mapid_t sys_mmap(int fd, void *addr) {
-    printf("mamp called\n");
-    return -1;
+    // Check that the address is in user memory.
+    if  (addr == NULL || !is_user_vaddr(addr)) {
+        sys_exit(-1);
+    }
+
+    // Check that the address is page aligned
+    if (pg_ofs(addr)) {
+        return -1;
+        sys_exit(-1);
+    }
+
+    struct file *file = thread_current()->files.data[fd];
+    lock_acquire(&filesys_lock);
+    off_t len = file_length(file);
+    lock_release(&filesys_lock);
+
+    // Doesn't bother with zero length files.
+    if (len == 0 ) {
+        return -1;
+    }
+    // Fail if the file is too large to fit in user memory.
+    if  (!is_user_vaddr(addr + len)) {
+        sys_exit(-1);
+    }
+
+    if (!fd_valid(fd)) {
+        return -1;
+    }
+    struct thread *curr = thread_current();
+    struct spt_entry *se;
+    uint32_t read_bytes = (uint32_t) len;
+    uint32_t zero_bytes = ROUND_UP(read_bytes, PGSIZE) - read_bytes;
+    size_t page_read_bytes;
+    size_t page_zero_bytes;
+    off_t ofs = 0;
+    bool writable = true;
+    while (read_bytes > 0 || zero_bytes > 0) {
+        page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        page_zero_bytes = PGSIZE - page_read_bytes;
+        se = spt_create_entry(spt_get_key(addr));
+        spt_update_filesys(se, file, ofs, page_read_bytes,
+                page_zero_bytes, writable);
+        spt_insert(curr->spt, se);
+
+        /* Advance */
+        read_bytes -= page_read_bytes;
+        zero_bytes -= page_zero_bytes;
+        ofs += PGSIZE;
+    }
+
+    return 10;
 }
 
 /* Unmaps the file-memory correspondence associated with
