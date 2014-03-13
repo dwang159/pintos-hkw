@@ -2,12 +2,21 @@
  * Functions for managing the supplemental page table.
  */
 
-#include "page.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <debug.h>
 #include "threads/pte.h"
 #include "threads/malloc.h"
+#include "vm/page.h"
+
+/* Hash table functions for the supplemental page table. */
+bool spt_hash_less_func(
+    const struct hash_elem *e1,
+    const struct hash_elem *e2,
+    void *aux);
+unsigned spt_hash_func(const struct hash_elem *e, void *aux);
+
+/* ===== Function Definitions ===== */
 
 /* Create a new page table. Returns a null pointer if memory
  * allocation fails.
@@ -16,7 +25,8 @@ struct spt_table *spt_create_table() {
     struct spt_table *spt;
 
     spt = (struct spt_table *) malloc(sizeof(struct spt_table));
-    if (!spt || !hash_init(&spt->data, &spt_hash, &spt_hash_less_func, NULL))
+    if (!spt || !hash_init(&spt->data, &spt_hash_func,
+                &spt_hash_less_func, NULL))
         return NULL;
     return spt;
 }
@@ -32,6 +42,9 @@ struct spt_entry *spt_create_entry(unsigned key) {
         return NULL;
 
     spte->key = key;
+    // Initialize as invalid.
+    spte->read_status = SPT_INVALID;
+    spte->write_status = SPT_INVALID;
     return spte;
 }
 
@@ -41,36 +54,32 @@ void spt_insert(struct spt_table *spt, struct spt_entry *spte) {
     hash_insert(&spt->data, &spte->elem);
 }
 
-/* Update an entry to SPT_ZERO. */
-void spt_update_zero(struct spt_entry *spte) {
+/* Update an entry's read/write status. */
+void spt_update_status(struct spt_entry *spte,
+        enum spt_page_type read_status,
+        enum spt_page_type write_status,
+        bool writable) {
     ASSERT(spte);
-    spte->type = SPT_ZERO;
+    spte->read_status = read_status;
+    spte->write_status = write_status;
+    spte->writable = writable;
 }
 
-/* Update an entry to SPT_FILESYS. */
+/* Update an entry's file data. */
 void spt_update_filesys(struct spt_entry *spte,
                         struct file *file, off_t offset,
-                        int read_bytes, int zero_bytes, bool writable) {
+                        int read_bytes, int zero_bytes) {
     ASSERT(spte && file);
-    spte->type = SPT_FILESYS;
     spte->data.fdata.file = file;
     spte->data.fdata.offset = offset;
     spte->data.fdata.read_bytes = read_bytes;
     spte->data.fdata.zero_bytes = zero_bytes;
-    spte->data.fdata.writable = writable;
 }
 
-/* Update an entry to SPT_SWAP. */
+/* Update an entry's swap data. */
 void spt_update_swap(struct spt_entry *spte, size_t slot) {
     ASSERT(spte);
-    spte->type = SPT_SWAP;
     spte->data.slot = slot;
-}
-
-/* Update an entry to SPT_INVALID (invalidates the page). */
-void spt_invalidate(struct spt_entry *spte) {
-    ASSERT(spte);
-    spte->type = SPT_INVALID;
 }
 
 /* Look up a page table entry. Returns NULL if no entry exists. */
@@ -106,7 +115,7 @@ void spt_remove(struct spt_table *spt, unsigned key) {
 }
 
 /* Hashes a pointer. */
-unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
+unsigned spt_hash_func(const struct hash_elem *e, void *aux UNUSED) {
     struct spt_entry *spte;
     ASSERT(e);
     spte = hash_entry(e, struct spt_entry, elem);
@@ -127,9 +136,7 @@ bool spt_hash_less_func(const struct hash_elem *e1,
     struct spt_entry *spte1, *spte2;
 
     ASSERT(e1 && e2);
-
     spte1 = hash_entry(e1, struct spt_entry, elem);
     spte2 = hash_entry(e2, struct spt_entry, elem);
-
     return spte1->key < spte2->key;
 }
