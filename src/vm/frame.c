@@ -60,8 +60,10 @@ struct frame_entry *frame_create_entry(unsigned key) {
     fe = (struct frame_entry *) malloc(sizeof(struct frame_entry));
     if (!fe)
         return NULL;
-
+    // Initialize values.
     fe->key = key;
+    fe->owner = NULL;
+    fe->ukey = 0;
     return fe;
 }
 
