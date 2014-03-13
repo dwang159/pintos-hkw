@@ -57,6 +57,9 @@ struct spt_entry {
 /* Create a new page table. */
 struct spt_table *spt_create_table(void);
 
+/* Destroys the current table, and writes all its associated frames back.*/
+void spt_reclaim_table(struct spt_table *);
+
 /* Create a new page table entry (does not insert). */
 struct spt_entry *spt_create_entry(unsigned key);
 
@@ -86,4 +89,6 @@ void spt_remove(struct spt_table *spt, unsigned key);
 /* Returns a key to look up an entry in the hash table given a uaddr. */
 unsigned spt_get_key(const void *uaddr);
 
+/* Write this entry back to whence it came. */
+void spt_writeback(struct spt_entry *se, bool full_exit);
 #endif /* VM_PAGE_H */

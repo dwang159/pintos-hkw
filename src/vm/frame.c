@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <debug.h>
+#include <stdio.h>
+#include "devices/serial.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/pte.h"
@@ -117,7 +119,7 @@ void *frame_get(void *uaddr, bool writable) {
         key = fe->key;
         kpage = (void *) key;
         // If necessary, write back the contents of this frame.
-        frame_writeback(fe);
+        frame_writeback(fe, false);
         // Unmap this page.
         pagedir_clear_page(fe->owner->pagedir, (void *) fe->ukey);
         // Old page is no longer needed.
@@ -170,7 +172,7 @@ bool frame_hash_less_func(
  */
 struct frame_entry *evict_first() {
     struct hash_iterator hi;
-    struct frame_entry *fe;
+    struct frame_entry *fe = NULL;
     hash_first(&hi, &ft.data);
     while (hash_next(&hi)) {
         fe = hash_entry(hash_cur(&hi), struct frame_entry, elem);
@@ -181,14 +183,14 @@ struct frame_entry *evict_first() {
             pagedir_set_accessed(fe->owner->pagedir, (void *) fe->ukey, false);
     }
     // If none were found, return the last one we saw.
+    ASSERT(fe);
     return fe;
 }
 
 /* Write back a frame to either swap or file. */
-void frame_writeback(struct frame_entry *fe) {
+void frame_writeback(struct frame_entry *fe, bool full_exit) {
     struct spt_entry *spte;
     void *kpage, *upage;
-
     ASSERT(fe);
     kpage = (void *) fe->key;
     upage = (void *) fe->ukey;
@@ -196,10 +198,12 @@ void frame_writeback(struct frame_entry *fe) {
     size_t slotid;
     switch (spte->write_status) {
     case SPT_SWAP:
-        slotid = swap_swalloc_and_write(kpage);
-        // Set the read-from location.
-        spt_update_status(spte, SPT_SWAP, SPT_SWAP, spte->writable);
-        spt_update_swap(spte, slotid);
+        if (!full_exit) {
+            slotid = swap_swalloc_and_write(kpage);
+            // Set the read-from location.
+            spt_update_status(spte, SPT_SWAP, SPT_SWAP, spte->writable);
+            spt_update_swap(spte, slotid);
+        }
         break;
     case SPT_FILESYS:
         // If dirty bit is set, write back. This also takes care of
@@ -208,11 +212,12 @@ void frame_writeback(struct frame_entry *fe) {
             file_write_at(spte->data.fdata.file,
                     kpage, PGSIZE, spte->data.fdata.offset);
         }
+
         // Clear the dirty bit.
         pagedir_set_dirty(fe->owner->pagedir, upage, false);
         spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, spte->writable);
         break;
     default:
-        PANIC("Write back failed.\n");
+        ; // I don't think panicking is appropriate here. Maybe not?
     }
 }

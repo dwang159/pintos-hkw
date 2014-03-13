@@ -4,17 +4,22 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <debug.h>
 #include "threads/pte.h"
 #include "threads/malloc.h"
+#include "userprog/pagedir.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 /* Hash table functions for the supplemental page table. */
-bool spt_hash_less_func(
+static bool spt_hash_less_func(
     const struct hash_elem *e1,
     const struct hash_elem *e2,
     void *aux);
-unsigned spt_hash_func(const struct hash_elem *e, void *aux);
+static unsigned spt_hash_func(const struct hash_elem *e, void *aux);
+
+static void free_entry_resources(struct hash_elem *e, void *aux UNUSED);
 
 /* ===== Function Definitions ===== */
 
@@ -31,6 +36,21 @@ struct spt_table *spt_create_table() {
     return spt;
 }
 
+/* Destroys a supplementary page table. Writes back all the
+ * necessary frames and removes all it's entries. */
+void spt_reclaim_table(struct spt_table *spt) {
+    hash_destroy(&(spt->data), free_entry_resources);
+    free(spt);
+}
+
+void free_entry_resources(struct hash_elem *e, void *aux UNUSED) {
+    uint32_t *pd = thread_current()->pagedir;
+    struct spt_entry *se = hash_entry(e, struct spt_entry, elem);
+    void *uaddr = (void *) se->key;
+    ASSERT(is_user_vaddr(uaddr));
+    spt_writeback(se, true);
+    pagedir_clear_page(pd, uaddr);
+}
 /* Create a new page table entry. Returns a null pointer if
  * memory allocation fails.
  */
@@ -139,4 +159,41 @@ bool spt_hash_less_func(const struct hash_elem *e1,
     spte1 = hash_entry(e1, struct spt_entry, elem);
     spte2 = hash_entry(e2, struct spt_entry, elem);
     return spte1->key < spte2->key;
+}
+
+
+void spt_writeback(struct spt_entry *se, bool full_exit) {
+    void *kpage, *upage;
+    ASSERT(se);
+    upage = (void *) se->key;
+    struct thread *curr = thread_current();
+    kpage = pagedir_get_page(curr->pagedir, upage);
+    if (!kpage) {
+        return;
+    }
+    size_t slotid;
+    switch (se->write_status) {
+    case SPT_SWAP:
+        if (!full_exit) {
+            slotid = swap_swalloc_and_write(kpage);
+            // Set the read-from location.
+            spt_update_status(se, SPT_SWAP, SPT_SWAP, se->writable);
+            spt_update_swap(se, slotid);
+        }
+        break;
+    case SPT_FILESYS:
+        // If dirty bit is set, write back. This also takes care of
+        // read-only files - the dirty bit will never be set.
+        if (pagedir_is_dirty(curr->pagedir, upage)) {
+            file_write_at(se->data.fdata.file,
+                    kpage, PGSIZE, se->data.fdata.offset);
+        }
+
+        // Clear the dirty bit.
+        pagedir_set_dirty(curr->pagedir, upage, false);
+        spt_update_status(se, SPT_FILESYS, SPT_FILESYS, se->writable);
+        break;
+    default:
+        ; // I don't think panicking is appropriate here. Maybe not?
+    }
 }

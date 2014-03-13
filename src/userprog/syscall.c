@@ -211,6 +211,8 @@ void sys_halt() {
 void sys_exit(int status) {
     // Set the exit status.
     struct thread *t = thread_current();
+    
+    spt_reclaim_table(t->spt);
 
     // Print exit message.
     printf("%s: exit(%d)\n", t->name, status);
@@ -218,6 +220,7 @@ void sys_exit(int status) {
     // Set exit status.
     struct exit_state *es = thread_exit_status.data[t->tid];
     es->exit_status = status;
+
 
     // Do the rest of the exit process.
     thread_exit();
@@ -397,10 +400,18 @@ void sys_close(int fd)
  * virtual pages starting at addr. */
 mapid_t sys_mmap(int fd, void *uaddr) {
     // Check that the address is in user memory.
+    if (uaddr == NULL) {
+        return -1;
+    }
     if  (uaddr == NULL || !is_user_vaddr(uaddr)) {
         sys_exit(-1);
     }
 
+    // Can't open an invalid file.
+    if (!fd_valid(fd)) {
+        return -1;
+    }
+    
     // Check that the address is page aligned
     if (pg_ofs(uaddr)) {
         return -1;
@@ -421,34 +432,29 @@ mapid_t sys_mmap(int fd, void *uaddr) {
     if  (!is_user_vaddr(uaddr + len)) {
         sys_exit(-1);
     }
-
-    // Can't open an invalid file.
-    if (!fd_valid(fd)) {
-        return -1;
-    }
-
     struct thread *curr = thread_current();
 
     struct hash_iterator i;
-        hash_first (&i, &curr->fmap->data);
-    // Check that there is no overlap with currently mapped files.
+    void *new_beg = uaddr;
+    void *new_end = (void *)ROUND_UP((int) uaddr + len, PGSIZE);
+    void *old_beg, *old_end;
+    hash_first(&i, &curr->spt->data);
     while (hash_next (&i)) {
-        struct fmap_entry *fme = hash_entry(hash_cur(&i), struct fmap_entry,
+        struct spt_entry *se = hash_entry(hash_cur(&i), struct spt_entry,
                 elem);
-        void *old_beg = fme->addr;
-        void *old_end = fme->addr + PGSIZE *fme->num_pages;
-        void *new_beg = uaddr;
-        void *new_end = (void *)ROUND_UP((int) uaddr + len, PGSIZE);
+        old_beg = (void *) se->key;
+        old_end = (void *) se->key + PGSIZE;
         /* If the new section starts before the end of the first,
          * make sure it ends before the first begins */
         if (new_beg < old_end && new_end >= old_beg) {
             return -1;
         }
         /* Likewise in the other direction */
-        if (old_beg < new_end && new_end >= old_beg) {
+        if (old_beg < new_end && old_end >= new_beg) {
             return -1;
         }
     }
+        
 
     struct spt_entry *se;
     uint32_t read_bytes = (uint32_t) len;
@@ -457,11 +463,12 @@ mapid_t sys_mmap(int fd, void *uaddr) {
     size_t page_zero_bytes;
     off_t ofs = 0;
     unsigned num_pages = 0;
+    void *read_addr = uaddr;
     while (read_bytes > 0 || zero_bytes > 0) {
         num_pages++;
         page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         page_zero_bytes = PGSIZE - page_read_bytes;
-        se = spt_create_entry(spt_get_key(uaddr));
+        se = spt_create_entry(spt_get_key(read_addr));
         spt_update_status(se, SPT_FILESYS, SPT_FILESYS, true);
         spt_update_filesys(se, hidden, ofs, page_read_bytes, 
                 page_zero_bytes);
@@ -471,14 +478,13 @@ mapid_t sys_mmap(int fd, void *uaddr) {
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         ofs += PGSIZE;
-        uaddr += PGSIZE;
+        read_addr += PGSIZE;
     }
     mapid_t key = fmap_generate_id();
     struct fmap_entry *fme = fmap_create_entry(key);
     // Need to keep the inode open even if the callee closes .
     fmap_update(fme, fd, uaddr, hidden, num_pages);
     fmap_insert(curr->fmap, fme);
-    printf("inserted okay\n");
     return key;
 }
 
@@ -492,25 +498,23 @@ void sys_munmap(mapid_t mapping) {
     unsigned count = fme->num_pages;
     unsigned key;
     struct frame_entry *fe;
-    printf("here something goes wrong\n");
     while(count--) {
         void *kpage = pagedir_get_page(curr->pagedir, uaddr);
         if (kpage) {
             key = frame_get_key(kpage);
             fe = frame_lookup(key);
-            frame_writeback(fe);
+            frame_writeback(fe, false);
             frame_remove(key);
             pagedir_clear_page(curr->pagedir, uaddr);
         }
         key = spt_get_key(uaddr);
-        spt_remove(curr->spt, key);
+        struct spt_entry *spe = spt_lookup(curr->spt, key);
+        spt_update_status(spe, SPT_INVALID, SPT_INVALID, false);
         uaddr += PGSIZE;
     }
-    printf("here something goes wrong\n");
     // Write back all the frames
     // remove all from spt
     //  
     file_close(fme->hidden);
-    printf("here something goes wrong\n");
 }
 #endif /* VM */
