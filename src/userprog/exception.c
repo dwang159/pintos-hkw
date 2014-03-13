@@ -133,8 +133,10 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-#ifndef VM
     bool not_present; /* True: not-present page, false: writing r/o page. */
+    not_present = (f->error_code & PF_P) == 0;
+
+#ifndef VM
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
 
