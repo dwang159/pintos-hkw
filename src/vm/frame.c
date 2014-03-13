@@ -98,7 +98,7 @@ void frame_remove(unsigned key) {
 }
 
 /* Returns a free frame, evicting one if necessary. */
-void *frame_get(void *uaddr, bool writeable) {
+void *frame_get(void *uaddr, bool writable) {
     struct frame_entry *fe;
     unsigned key = frame_get_key(uaddr);
     void *upage;
@@ -112,7 +112,7 @@ void *frame_get(void *uaddr, bool writeable) {
         fe = frame_create_entry(key);
         ASSERT(fe);
         frame_insert(fe);
-        install_page(upage, kpage, writeable);
+        install_page(upage, kpage, writable);
     } else {
         PANIC("NO EVICTING\n");
     }

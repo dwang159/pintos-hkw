@@ -527,6 +527,7 @@ static bool setup_stack(void **esp) {
     // Create a spt entry
     struct spt_entry *spte = spt_create_entry(
             spt_get_key((void *) PHYS_BASE - PGSIZE));
+
     spt_insert(thread_current()->spt, spte);
 
     if (kpage != NULL) {

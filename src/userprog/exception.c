@@ -151,32 +151,22 @@ static void page_fault(struct intr_frame *f) {
     void *kpage;
     struct thread *t = thread_current();
     if (fault_addr >= f->esp - STACK_HEURISTIC &&
-        fault_addr >= PHYS_BASE - MAX_STACK &&
-        fault_addr < PHYS_BASE)
-    {
+            fault_addr >= PHYS_BASE - MAX_STACK &&
+            fault_addr < PHYS_BASE) {
         kpage = frame_get(pg_round_down(fault_addr), true);
         struct spt_entry *se = spt_create_entry(spt_get_key(fault_addr));
         spt_insert(t->spt, se);
-    }
-    else
-    {
+    } else {
         struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
-
         if (!spte) {
-            printf("Page fault at %p: %s error %s page in %s context.\n",
-                    fault_addr,
-                    not_present ? "not present" : "rights violation",
-                    write ? "writing" : "reading",
-                    user ? "user" : "kernel");
             kill(f);
-        }
-        else {
-            kpage = frame_get(pg_round_down(fault_addr), true);
+        } else {
             switch (spte->type) {
                 case SPT_ZERO:
+                    kpage = frame_get(fault_addr, true);
                     memset(kpage, 0, PGSIZE);
                 case SPT_FILESYS:
-                    ;
+                    kpage = frame_get(fault_addr, spte->data.fdata.writable);
                     int page_read_bytes = spte->data.fdata.read_bytes;
                     int page_zero_bytes = spte->data.fdata.zero_bytes;
                     struct file * file = spte->data.fdata.file;
@@ -184,8 +174,9 @@ static void page_fault(struct intr_frame *f) {
                     file_seek(file, spte->data.fdata.offset);
                     /* Load this page. */
                     if (file_read(file, kpage, page_read_bytes) !=
-                        (int) page_read_bytes) {
+                            (int) page_read_bytes) {
                         palloc_free_page(kpage);
+                        sys_exit(-1);
                     }
                     /* Zero the proper bytes in the page */
                     memset(kpage + page_read_bytes, 0, page_zero_bytes);

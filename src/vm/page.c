@@ -42,6 +42,8 @@ struct spt_entry *spt_create_entry(unsigned key) {
         return NULL;
 
     spte->key = key;
+    // Initialize as invalid.
+    spte->type = SPT_INVALID;
     return spte;
 }
 
