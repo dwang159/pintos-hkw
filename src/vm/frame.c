@@ -31,7 +31,7 @@ bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_,
     return a->frame_no < b->frame_no;
 }
 
-/* Initializes the frame table for the process that has 
+/* Initializes the frame table for the process that has
  * just started. */
 
 void frame_table_init() {
@@ -64,7 +64,7 @@ pageinfo *frame_table_lookup(frame_number_t frame_no) {
     if (fp != NULL) {
         return fp->pages;
     } else {
-        return NULL; 
+        return NULL;
     }
 }
 
@@ -142,19 +142,10 @@ void * frame_get(void *uaddr, bool writable) {
     ASSERT(is_user_vaddr(uaddr));
     lock_acquire(&ft_lock);
     void *kpage = palloc_get_page(PAL_USER);
-    //install_page(uaddr, kpage, writable);
-    //return kpage;
-    ///printf("kpage: %p\n", kpage);
     ASSERT(is_kernel_vaddr(kpage));
     if (kpage) {
         frame_no = (frame_number_t) kpage;
-        ///printf("pte will fail...\n");
-        ///printf("vaddr: %p\n", uaddr);
-        ///printf("kpage: %p\n", kpage);
-        //uintptr_t paddr = vtop(kpage);
-        ///printf("paddr: %p\n", (void *)paddr);
         pte = pte_create_user(kpage, writable);
-        ///printf("just kidding.\n");
         fp = frame_create_entry(frame_no);
         hash_insert(&ft_hash, &(fp->hash_elem));
         install_page(uaddr, kpage, writable);
@@ -181,8 +172,8 @@ void frame_free_all(void) {
     struct hash_iterator i;
     hash_first(&i, &ft_hash);
     while (hash_next(&i)) {
-        struct frame *fp = hash_entry(hash_cur(&i), 
-                                      struct frame, 
+        struct frame *fp = hash_entry(hash_cur(&i),
+                                      struct frame,
                                       hash_elem);
         int i;
         for (i = 0; i < PAGE_FRAME_RATIO; i++) {
@@ -203,7 +194,6 @@ void frame_writeback(struct frame *fp) {
     int i;
     unsigned key;
     uint32_t *pd;
-    printf("Writeback called.\n");
     for (i = 0; i < PAGE_FRAME_RATIO; i++) {
         if (fp->pages[i].pte != 0) {
             key = spt_get_key((void *) fp->pages[i].pte);
@@ -211,7 +201,6 @@ void frame_writeback(struct frame *fp) {
             pd = thread_current()->pagedir;
             switch (se->type) {
             case SPT_INVALID:
-                printf("Invalid memory access.\n");
                 sys_exit(-1);
                 break;
             case SPT_ZERO:
@@ -249,14 +238,14 @@ struct frame *random_frame(void) {
     unsigned long num;
     do {
         num = random_ulong() % NUM_FRAMES;
-    } while (!VALID_FRAME_NO(num)); 
+    } while (!VALID_FRAME_NO(num));
     return find_frame((frame_number_t) num);
 }
 
 struct frame *lru_frame(void) {
     /* This might be nonsensical. */
     struct list_elem *e;
-    for(e = list_begin(&ft_list); 
+    for(e = list_begin(&ft_list);
           e != list_end(&ft_list);
           e = list_next(e)) {
         struct frame *f = list_entry(e, struct frame, list_elem);

@@ -508,24 +508,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes, writable);
         spt_insert(curr->spt, se);
 
-///        /* Get a page of memory. */
-///        uint8_t *kpage = palloc_get_page(PAL_USER);
-///        if (kpage == NULL)
-///            return false;
-///
-///        /* Load this page. */
-///        if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
-///            palloc_free_page(kpage);
-///            return false;
-///        }
-///        memset(kpage + page_read_bytes, 0, page_zero_bytes);
-///
-///        /* Add the page to the process's address space. */
-///        if (!install_page(upage, kpage, writable)) {
-///            palloc_free_page(kpage);
-///            return false;
-///        }
-
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
@@ -539,13 +521,13 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
     user virtual memory. */
 static bool setup_stack(void **esp) {
     uint8_t *kpage;
-    bool success = false;
 
     // Get a frame for the stack
-    kpage = frame_get(((uint8_t *) PHYS_BASE) - PGSIZE, true);
+    kpage = frame_get((void *) PHYS_BASE - PGSIZE, true);
     // Create a spt entry
-    struct spt_entry *se = spt_create_entry(((uint8_t) PHYS_BASE) - PGSIZE);
-    spt_insert(thread_current()->spt, se);
+    struct spt_entry *spte = spt_create_entry(
+            spt_get_key((void *) PHYS_BASE - PGSIZE));
+    spt_insert(thread_current()->spt, spte);
 
     if (kpage != NULL) {
         *esp = PHYS_BASE;

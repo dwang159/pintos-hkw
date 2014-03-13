@@ -49,7 +49,7 @@ void spt_update_zero(struct spt_entry *spte) {
 
 /* Update an entry to SPT_FILESYS. */
 void spt_update_filesys(struct spt_entry *spte,
-                        struct file *file, off_t offset, 
+                        struct file *file, off_t offset,
                         int read_bytes, int zero_bytes, bool writable) {
     ASSERT(spte && file);
     spte->type = SPT_FILESYS;

@@ -140,10 +140,9 @@ static void page_fault(struct intr_frame *f) {
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
-    ///printf("%x\n", fault_addr);
     void *kpage;
     struct thread *t = thread_current();
-    if (fault_addr >= f->esp - STACK_HEURISTIC && 
+    if (fault_addr >= f->esp - STACK_HEURISTIC &&
         fault_addr < PHYS_BASE + MAX_STACK)
     {
         kpage = frame_get(pg_round_down(fault_addr), true);
@@ -153,9 +152,13 @@ static void page_fault(struct intr_frame *f) {
     else
     {
         struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
-    
+
         if (!spte) {
-            //printf("Error spte not found\n");
+            printf("Page fault at %p: %s error %s page in %s context.\n",
+                    fault_addr,
+                    not_present ? "not present" : "rights violation",
+                    write ? "writing" : "reading",
+                    user ? "user" : "kernel");
             kill(f);
         }
         else {
@@ -168,7 +171,7 @@ static void page_fault(struct intr_frame *f) {
                     int page_read_bytes = spte->data.fdata.read_bytes;
                     int page_zero_bytes = spte->data.fdata.zero_bytes;
                     struct file * file = spte->data.fdata.file;
-    
+
                     file_seek(file, spte->data.fdata.offset);
                     /* Load this page. */
                     if (file_read(file, kpage, page_read_bytes) !=
@@ -183,14 +186,4 @@ static void page_fault(struct intr_frame *f) {
             }
         }
     }
-    /* To implement virtual memory, delete the rest of the function
-       body, and replace it with code that brings in the page to
-       which fault_addr refers. */
-       /*///
-    printf("Page fault at %p: %s error %s page in %s context.\n",
-           fault_addr,
-           not_present ? "not present" : "rights violation",
-           write ? "writing" : "reading",
-           user ? "user" : "kernel");
-    kill(f);*/
 }
