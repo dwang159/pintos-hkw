@@ -195,9 +195,8 @@ struct frame_entry *evict_first() {
         // Check if accessed.
         if (!pagedir_is_accessed(fe->owner->pagedir, (void *) fe->ukey)) {
             return fe;
-        }
-        else {
-            pagedir_set_accessed(fe->owner->pagedir, (void *) fe->ukey, 
+        } else {
+            pagedir_set_accessed(fe->owner->pagedir, (void *) fe->ukey,
                     false);
         }
     }
