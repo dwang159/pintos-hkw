@@ -83,7 +83,7 @@ struct spt_entry *spt_lookup(struct spt_table *spt, unsigned key);
 void spt_remove(struct spt_table *spt, unsigned key);
 
 /* Returns a key to look up an entry in the hash table given a uaddr. */
-unsigned spt_get_key(void *uaddr);
+unsigned spt_get_key(const void *uaddr);
 
 /* Returns true if e1 < e2. */
 bool spt_hash_less_func(

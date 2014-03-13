@@ -1,16 +1,16 @@
-#include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "pagedir.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
-#include "process.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -141,6 +141,22 @@ static void syscall_handler(struct intr_frame *f) {
         else
             args_valid = false;
         break;
+#ifdef VM
+    case SYS_MMAP:
+        if (check_args_2(args, int, void*)) {
+            off1 = sizeof(int);
+            f->eax = sys_mmap(*((int *) args),
+                              *((void **) (args + off1)));
+        } else
+            args_valid =false;
+        break;
+    case SYS_MUNMAP:
+        if (check_args_1(args, mapid_t))
+            sys_munmap(*((mapid_t *) args));
+        else
+            args_valid = false;
+        break;
+#endif
     default:
         args_valid = false;
         break;
@@ -154,8 +170,13 @@ static void syscall_handler(struct intr_frame *f) {
 
 /* Checks that addr points into user space on a currently mapped page. */
 bool mem_valid(const void *addr) {
+#ifdef VM
     return addr != NULL &&
         spt_lookup(thread_current()->spt, spt_get_key(addr)) != NULL;
+#else /* No VM */
+    return (addr != NULL && is_user_vaddr(addr) &&
+            pagedir_get_page(thread_current()->pagedir, addr) != NULL);
+#endif
 }
 
 /* Checks if the file descriptor is valid. */
@@ -358,3 +379,19 @@ void sys_close(int fd)
     lock_release(&filesys_lock);
     curr->files.data[fd] = NULL;
 }
+
+#ifdef VM
+/** Project 5 handlers */
+/* Mays a file specified by fdinto consecutive
+ * virtual pages starting at addr. */
+mapid_t sys_mmap(int fd, void *addr) {
+    printf("mamp called\n");
+    return -1;
+}
+
+/* Unmaps the file-memory correspondence associated with
+ * `mapping.` */
+void sys_munmap(mapid_t mapping) {
+ printf("suckage\n");
+}
+#endif /* VM */
