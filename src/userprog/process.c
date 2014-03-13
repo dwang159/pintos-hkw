@@ -491,7 +491,7 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
     error occurs. */
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
                          uint32_t read_bytes, uint32_t zero_bytes,
-                         bool writable UNUSED) {
+                         bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
@@ -504,10 +504,11 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        struct thread * curr = thread_current();
-        struct spt_entry *se = spt_create_entry(spt_get_key(upage));
-        spt_update_filesys(se, file, ofs, page_read_bytes, page_zero_bytes);
-        spt_insert(curr->spt, se);
+        struct thread *curr = thread_current();
+        struct spt_entry *spte = spt_create_entry(spt_get_key(upage));
+        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, writable);
+        spt_update_filesys(spte, file, ofs, page_read_bytes, page_zero_bytes);
+        spt_insert(curr->spt, spte);
 
         /* Advance. */
         read_bytes -= page_read_bytes;
