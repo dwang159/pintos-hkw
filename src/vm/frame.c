@@ -167,6 +167,12 @@ bool frame_hash_less_func(
     fe2 = hash_entry(e2, struct frame_entry, elem);
     return fe1->key < fe2->key;
 }
+/* Writes a frame table entry back to whence it came. */
+void frame_writeback(struct frame_entry *fe) {
+    fe++;
+    /* TODO */
+    return;
+}
 
 /* Evicts the first frame it sees with the accessed bit unset. If
  * none are found, evicts the last one it saw.

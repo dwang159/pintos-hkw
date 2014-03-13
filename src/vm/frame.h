@@ -40,6 +40,9 @@ struct frame_entry *frame_lookup(unsigned key);
 /* Remove an entry from the frame table. */
 void frame_remove(unsigned key);
 
+/* Clears the contents of the frame. */
+void frame_writeback(struct frame_entry *fe);
+
 /* Returns a free frame, evicting one if necessary. */
 void *frame_get(void *uaddr, bool writeable);
 

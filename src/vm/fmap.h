@@ -18,13 +18,18 @@ struct fmap_table {
 
 struct fmap_entry {
     void *addr;
-    unsigned size;
+    int fd;
+    struct file *hidden;
+    unsigned num_pages;
     unsigned key;
     struct hash_elem elem;
 };
 
 /* Create a new mapping table. */
 struct fmap_table *fmap_create_table(void);
+
+void fmap_update(struct fmap_entry *fme, int fd, void *addr, 
+        struct file *hidden, unsigned size);
 
 /* Creates a unique key each time. */
 mapid_t fmap_generate_id(void);
