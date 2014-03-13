@@ -37,6 +37,14 @@ struct fmap_entry *fmap_create_entry(mapid_t key) {
     return fme;
 }
 
+void fmap_update(struct fmap_entry *fme, int fd, void *addr, 
+        unsigned size) {
+    ASSERT(fme);
+    fme->addr = addr;
+    fme->fd = fd;
+    fme->size = size;
+}
+
 /* Insert an entry into the mapping table. */
 void fmap_insert(struct fmap_table *fmap, struct fmap_entry *fme) {
     ASSERT(fmap && fme);

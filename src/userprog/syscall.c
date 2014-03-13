@@ -438,8 +438,11 @@ mapid_t sys_mmap(int fd, void *addr) {
         zero_bytes -= page_zero_bytes;
         ofs += PGSIZE;
     }
-
-    return 10;
+    mapid_t key = fmap_generate_id();
+    struct fmap_entry *fme = fmap_create_entry(key);
+    fmap_update(fme, fd, addr, (unsigned) len); 
+    fmap_insert(curr->fmap, fme);
+    return key;
 }
 
 /* Unmaps the file-memory correspondence associated with
