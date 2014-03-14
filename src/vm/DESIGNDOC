@@ -68,18 +68,21 @@ struct spt_entry {
     enum spt_page_type read_status;
     enum spt_page_type write_status;
 
-    // Additional data about the page, depending on the page type.
-    // Struct to keep information on the location of the
-    // page within the file.
-    struct {
-        struct file *file;
-        off_t offset;
-        int read_bytes;
-        int zero_bytes;
-    } fdata;
-    
-    // Used if associated with swap.
-    size_t slot;
+    // Switch the union based on read and write type.
+    union {
+        // Additional data about the page, depending on the page type.
+        // Struct to keep information on the location of the
+        // page within the file.
+        struct {
+            struct file *file;
+            off_t offset;
+            int read_bytes;
+            int zero_bytes;
+        } fdata;
+        
+        // Used if associated with swap.
+        size_t slot;
+    } data;
 
     bool writable;
     // Distinguish mapped files from loaded ones.
