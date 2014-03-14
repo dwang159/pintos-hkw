@@ -12,7 +12,7 @@ Timothy Holland <tholland@caltech.edu>
 Daniel Kong <dkong@caltech.edu>
 Daniel Wang <dwang@caltech.edu>
 
->> Specify how many late tokens you are using on this assignment: 0
+>> Specify how many late tokens you are using on this assignment: 2
 
 >> What is the Git repository and commit hash for your submission?
 
@@ -23,6 +23,10 @@ Daniel Wang <dwang@caltech.edu>
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
+So Donnie gave us an extension to Monday the 10th... And then
+we used two late tokens to get us to Wednesday... and then we
+submitted on Thursday. So that's like a day late right?
+Only a 10% penalty? (have mercy?)
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
@@ -38,10 +42,63 @@ Daniel Wang <dwang@caltech.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Describes the kind of access for that entry
+    enum spt_page_type {
+        SPT_INVALID,
+        SPT_ZERO,
+        SPT_FILESYS,
+        SPT_SWAP
+    };
+
+A correspondence between user page addresses and SPT entries
+    struct spt_table {
+        struct hash data;
+    };
+
+/* Data structure for a supplemental page table entry. */
+struct spt_entry {
+    // Element used to store entry in page table.
+    struct hash_elem elem;
+
+    // Key used to identify page. Should be the uaddr of the page with
+    // the lower 12 bits zeroed out.
+    unsigned key;
+
+    // Page status (where to read and write data).
+    enum spt_page_type read_status;
+    enum spt_page_type write_status;
+
+    // Additional data about the page, depending on the page type.
+    // Struct to keep information on the location of the
+    // page within the file.
+    struct {
+        struct file *file;
+        off_t offset;
+        int read_bytes;
+        int zero_bytes;
+    } fdata;
+    
+    // Used if associated with swap.
+    size_t slot;
+
+    bool writable;
+    // Distinguish mapped files from loaded ones.
+    bool is_mmap; /* Dist
+};
+
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
+The faulting address can be used to index into the supplementary page table.
+From there, there is a data structure that provides the decision making
+about what actions to take and the data for that action.
+    If the page has a read_status of SPT_ZERO, the page it is gifted
+is memset to 0. If it has a read_status of SPT_FILESYS, it looks into
+the fdata structure for a struct file pointer, an offset, and the number
+of bytes to read and the number of bytes to zero as in load_segment. If
+the read_status is SPT_SWAP, it asks the swap table to fill it's frame
+with the contents numbered `slot.`
 
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
@@ -51,7 +108,7 @@ Daniel Wang <dwang@caltech.edu>
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
-We used a lock around the frame allocator TODO
+We used a lock around the frame allocator.
 
 ---- RATIONALE ----
 
@@ -121,15 +178,52 @@ We used a lock around the frame allocator TODO
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+A per-process hashmap between mapid_ts and fmap'd files.
+
+/* File mapping data structure */
+struct fmap_table {
+    struct hash data;
+};
+
+struct fmap_entry {
+    void *addr;  // The address the file is mapped into
+    int fd;      // The file descriptor given by the process
+    struct file *hidden; // The file is reopened by the kernel so
+                         // that if the child closes it, it is still open.
+    unsigned num_pages; // the number of pages for the file
+    unsigned key; // the mapid for the file
+    struct hash_elem elem; // Used to index into the hash table
+};
+
+// Incremented and given out each time a mapping is asked for by 
+// a process.
+static mapid_t key_giver = 0;
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
+On mapping, the file's SPT entries are filled out but the file
+is not loaded. Then on a fault, the page_fault handler will
+consult the spt and realize to look into the file and find
+the contents there.
+    There is a member "is_mmap" for the spt_entry struct that indicates
+whether memory belonging to a loaded file or a mapped file. If it
+belongs to a loaded file, it is paged out on eviction to swap but if
+it belongs to a mapped file it is written back to the file. While
+the file is mapped, these SPT entries remain but are removed upon
+munmap.
 
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
-
+We used a hash_iterator over the supplementary page table, and
+compared the start and end addresses of the new segment with
+all of the old pages. For any pair of extents a1-a2 and b1-b2,
+there is no overlap if 
+    whenever a1 < b2, b1 >= a2 and vice versa.
+    That is, whenever a starts before b ends, b starts after a ends.
+We just check that this is the case for all pages currently mapped. This
+could be more efficient if we just kept track of mapped segments.
 ---- RATIONALE ----
 
 >> C4: Mappings created with "mmap" have similar semantics to those of
@@ -138,7 +232,11 @@ We used a lock around the frame allocator TODO
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
-
+It does share a lot. Probably the only major difference is in
+upon a pagefault, it reads it into memory differently on
+the contents of spte->is_mmap: they both have SPT_FILESYS for
+their read status but loaded files have SPT_SWAP as it's write_status and
+the mmapped files have SPT_FILESYS.
 			   SURVEY QUESTIONS
 			   ================
 
@@ -150,9 +248,14 @@ website.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
+This took a huge amount of time, and it was very hard. Debugging was
+possible, but very difficult and required a very methodical and slow
+approach.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+Yes. I have a much better understanding of how to manage resources for
+multiple "guests" simultaneously.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
@@ -162,4 +265,4 @@ website.
 >> students, either for future quarters or the remaining projects?
 
 >> Any other comments?
-
+Ugh.
