@@ -177,7 +177,8 @@ static void page_fault(struct intr_frame *f) {
             // Get the data from the appropriate location.
             case SPT_ZERO:
                 memset(kpage, 0, PGSIZE);
-                spt_update_status(spte, SPT_INVALID, SPT_SWAP, spte->writable);
+                spt_update_status(spte, SPT_INVALID, SPT_SWAP,
+                        spte->writable);
                 break;
             case SPT_FILESYS:
                 page_read_bytes = spte->data.fdata.read_bytes;
@@ -195,9 +196,15 @@ static void page_fault(struct intr_frame *f) {
                 memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
                 // Update the page status. If not writable, it should be
-                // written to swap on eviction. Otherwise write back to file.
-                spt_update_status(spte, SPT_FILESYS,
-                        SPT_FILESYS, spte->writable);
+                // written to swap on eviction. Otherwise write back to
+                // file.
+                if (spte->is_mmap) {
+                    spt_update_status(spte, SPT_FILESYS, SPT_FILESYS,
+                            spte->writable);
+                } else {
+                    spt_update_status(spte, SPT_FILESYS,
+                            SPT_SWAP, spte->writable);
+                }
                 break;
             case SPT_SWAP:
                 swap_free_and_read(kpage, spte->data.slot);
