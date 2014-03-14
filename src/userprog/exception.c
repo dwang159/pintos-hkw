@@ -1,19 +1,10 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
-#include <string.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "syscall.h"
-#include "vm/frame.h"
-#include "vm/page.h"
-#include "threads/palloc.h"
-#include "threads/vaddr.h"
-#include "userprog/process.h"
-
-#define MAX_STACK 0x800000
-#define STACK_HEURISTIC 32
 
 /*! Number of page faults processed. */
 static long long page_fault_cnt;
@@ -117,14 +108,16 @@ static void kill(struct intr_frame *f) {
     description of "Interrupt 14--Page Fault Exception (#PF)" in
     [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void page_fault(struct intr_frame *f) {
+    bool not_present;  /* True: not-present page, false: writing r/o page. */
+    bool write;        /* True: access was write, false: access was read. */
+    bool user;         /* True: access by user, false: access by kernel. */
     void *fault_addr;  /* Fault address. */
 
-    /* Obtain faulting address, the virtual address that was accessed to
-     * cause the fault.  It may point to code or to data.  It is not
-     * necessarily the address of the instruction that caused
-     * the fault (that's f->eip).  See [IA32-v2a] "MOV--Move to/from
-     * Control Registers" and [IA32-v3a] 5.15 "Interrupt 14--Page Fault
-     * Exception (#PF)". */
+    /* Obtain faulting address, the virtual address that was accessed to cause
+       the fault.  It may point to code or to data.  It is not necessarily the
+       address of the instruction that caused the fault (that's f->eip).
+       See [IA32-v2a] "MOV--Move to/from Control Registers" and
+       [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception (#PF)". */
     asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
     /* Turn interrupts back on (they were only off so that we could
@@ -134,86 +127,18 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-    bool not_present; /* True: not-present page, false: writing r/o page. */
+    /* Determine cause. */
     not_present = (f->error_code & PF_P) == 0;
-
-#ifndef VM
-    bool write;       /* True: access was write, false: access was read. */
-    bool user;        /* True: access by user, false: access by kernel. */
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
+
+    /* To implement virtual memory, delete the rest of the function
+       body, and replace it with code that brings in the page to
+       which fault_addr refers. */
     printf("Page fault at %p: %s error %s page in %s context.\n",
            fault_addr,
            not_present ? "not present" : "rights violation",
            write ? "writing" : "reading",
            user ? "user" : "kernel");
     kill(f);
-#else /* VM */
-    if (!not_present)
-        kill(f);
-    void *kpage;
-    struct thread *t = thread_current();
-    struct spt_entry *spte = spt_lookup(t->spt, spt_get_key(fault_addr));
-    if (!spte) {
-        // Check if a stack page should be allocated.
-        void *esp = is_user_vaddr(f->esp) ? f->esp : thread_current()->esp;
-        if (possibly_stack(esp, fault_addr)) {
-            kpage = frame_get(fault_addr, true);
-            spte = spt_create_entry(spt_get_key(fault_addr));
-            // Stack pages should be written to swap if evicted.
-            spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
-            spt_insert(t->spt, spte);
-        } else {
-            // Invalid access.
-            kill(f);
-        }
-    } else {
-        int page_read_bytes;
-        int page_zero_bytes;
-        struct file *file;
-        // Allocate a kernel page to use.
-        kpage = frame_get(fault_addr, spte->writable);
-        switch (spte->read_status) {
-            // Get the data from the appropriate location.
-            case SPT_ZERO:
-                memset(kpage, 0, PGSIZE);
-                spt_update_status(spte, SPT_INVALID, SPT_SWAP,
-                        spte->writable);
-                break;
-            case SPT_FILESYS:
-                page_read_bytes = spte->data.fdata.read_bytes;
-                page_zero_bytes = spte->data.fdata.zero_bytes;
-                file = spte->data.fdata.file;
-
-                file_seek(file, spte->data.fdata.offset);
-                /* Load this page. */
-                if (file_read(file, kpage, page_read_bytes) !=
-                        (int) page_read_bytes) {
-                    palloc_free_page(kpage);
-                    sys_exit(-1);
-                }
-                /* Zero the proper bytes in the page */
-                memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-                // Update the page status. If not writable, it should be
-                // written to swap on eviction. Otherwise write back to
-                // file.
-                if (spte->is_mmap) {
-                    spt_update_status(spte, SPT_FILESYS, SPT_FILESYS,
-                            spte->writable);
-                } else {
-                    spt_update_status(spte, SPT_FILESYS,
-                            SPT_SWAP, spte->writable);
-                }
-                break;
-            case SPT_SWAP:
-                swap_free_and_read(kpage, spte->data.slot);
-                spt_update_status(spte, SPT_SWAP, SPT_SWAP, spte->writable);
-                // Todo: add to frame table?
-                break;
-            default:
-                sys_exit(-1);
-        }
-    }
-#endif /* No-VM/ VM */
 }

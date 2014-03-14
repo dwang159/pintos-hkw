@@ -5,10 +5,6 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 
-#ifdef VM
-#include "vm/fmap.h"
-#endif /* VM */
-
 void syscall_init(void);
 
 /* System calls. */
@@ -26,15 +22,8 @@ void sys_seek(int fd, unsigned int position);
 unsigned int sys_tell(int fd);
 void sys_close(int fd);
 
-#ifdef VM
-/* Project 5 system handlers. */
-mapid_t sys_mmap(int fd, void *addr);
-void sys_munmap(mapid_t mapping);
-#endif
-
 /* Checks if memory address is valid. */
 bool mem_valid(const void *addr);
-bool mem_writable(const void *addr);
 
 /* Checks file descriptor. */
 bool fd_valid(int fd);
