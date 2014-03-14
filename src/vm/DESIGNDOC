@@ -31,7 +31,8 @@ Only a 10% penalty? (have mercy?)
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
-    en.wikipedia.org/wiki/Virtual_memory
+
+en.wikipedia.org/wiki/Virtual_memory
 
 			PAGE TABLE MANAGEMENT
 			=====================
@@ -79,24 +80,25 @@ struct spt_entry {
             int read_bytes;
             int zero_bytes;
         } fdata;
-        
+
         // Used if associated with swap.
         size_t slot;
     } data;
 
     bool writable;
-    // Distinguish mapped files from loaded ones.
-    bool is_mmap; /* Dist
+    bool is_mmap;
 };
 
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
+
 The faulting address can be used to index into the supplementary page table.
 From there, there is a data structure that provides the decision making
 about what actions to take and the data for that action.
-    If the page has a read_status of SPT_ZERO, the page it is gifted
+
+If the page has a read_status of SPT_ZERO, the page it is gifted
 is memset to 0. If it has a read_status of SPT_FILESYS, it looks into
 the fdata structure for a struct file pointer, an offset, and the number
 of bytes to read and the number of bytes to zero as in load_segment. If
@@ -107,12 +109,14 @@ with the contents numbered `slot.`
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
 
-We avoid this issue by using dirty bits looked up in 
+We avoid this issue by using dirty bits looked up in
 thread_current()->pagedir.
+
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
+
 We used a lock around the frame allocator. If A and B fault at around
 the same time, one of them will have to wait until the other is given
 a frame and goes along its way until it is given one.
@@ -121,6 +125,7 @@ a frame and goes along its way until it is given one.
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+
 It enabled us efficient lookup of a wide number of mappings, and
 switiching on the read_status and write_status on either faults
 or eviction allowed us to have a pretty uniform treatment of entries
@@ -134,6 +139,7 @@ whether coming from 0, a loaded file, or a mapped file.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
 Lock for the swap table, preventing simultaneous access
 static struct lock swap_table_lock;
 
@@ -167,24 +173,36 @@ struct frame_entry {
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
+
 Our algorithm represents a modified second-chance policy. Rather than choose
 the first frame we see if all pages have been accessed, we choose the last
 one that we see. Otherwise, our algorithm should behave the same. We iterate
 through the members of the frame table, setting the accessed bit to false if
-it is set and evicting otherwise. 
+it is set and evicting otherwise.
 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
-We clear the page in the pagedir when a frame is evicted, and we destroy
-the previous frame entry. Then, we add a frame to the table in the proper
-place, treating it as though it were a normal insertion into the frame table.
-TODO DK
+
+After choosing a frame to evict, we write the frame's contents to disk.
+Each frame keeps track of the thread owning it and its ukey (the user
+address key for the supplemental page table), so it looks up its supplemental
+page table entry. We then write the frame back to disk - if the write
+status is set to SPT_SWAP, we find a slot in the swap table and write
+the data to swap, and otherwise if it is set to SPT_FILESYS, we look
+up the relevant file data in the supplemental page table and write the data
+back to that location. We then update the page's read status to read from
+wherever we wrote the data.
+
+After writing back the data, we evict the frame (by clearing its pagedir
+entry), free the frame entry struct containing it, create a new frame
+for P, and insert P's data into the frame.
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
-We define a maximum size for the stack (8MB), and define a STACK_HEURISTIC 
+
+We define a maximum size for the stack (8MB), and define a STACK_HEURISTIC
 value (set at 32 currently). Then, in the page fault handler, if no spt
 entry exists for the address, we check if the address is >= to
 esp - STACK_HEURISTIC and PHYS_BASE - MAX_STACK and that the address is
@@ -197,10 +215,11 @@ access and grow the stack.
 >> particular, explain how it prevents deadlock.  (Refer to the
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
-We lock the 2 global structures (frame and swap) any time we access them, 
+
+We lock the 2 global structures (frame and swap) any time we access them,
 making it so only one process can interact with it at any time. We acquire
 the lock whenever we access that particular data structure in other kernel
-code. To prevent deadlock, we ensure that any calls between the code of our 
+code. To prevent deadlock, we ensure that any calls between the code of our
 data structures doesn't attempt to acquire a lock multiple times. We further
 avoid calling functions in our data structures that acquire other data
 structures' locks. For example, we call swap functions from frame, but
@@ -210,6 +229,7 @@ we avoid obtaining the frame lock in swap, making it so deadlock cannot occur.
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
 Because the frame table is locked until P finishes evicting, Q will not
 fault the frame back in until P has finished evicting it.
 
@@ -217,6 +237,7 @@ fault the frame back in until P has finished evicting it.
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
+
 Again, the frame table is locked while reading a page in, so Q cannot evict
 that frame until P finishes reading it in.
 
@@ -225,6 +246,7 @@ that frame until P finishes reading it in.
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
 We use the page fault to bring in pages, treating it exactly like virtual
 addresses. When we attempt to access an invalid virtual address, if it is
 in the supplemental page table, we fault it in. If it is a stack page, we
@@ -239,12 +261,13 @@ process that tried to access the address.
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+
 We only lock the global structures (which makes sense, as these are the
 only ones that can be accessed by multiple threads). This is still
 relatively coarse, since we lock the entire frame and swap table, but
 it guarantees absence of race conditions, which is highly desirable
 when debugging. Finer locking would result in more parallelism, but we
-already struggled greatly to debug this project, so it is also 
+already struggled greatly to debug this project, so it is also
 probably impossible in the given time frame.
 
 			 MEMORY MAPPED FILES
@@ -273,9 +296,10 @@ struct fmap_entry {
     struct hash_elem elem; // Used to index into the hash table
 };
 
-// Incremented and given out each time a mapping is asked for by 
+// Incremented and given out each time a mapping is asked for by
 // a process.
 static mapid_t key_giver = 0;
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
@@ -297,7 +321,7 @@ munmap.
 We used a hash_iterator over the supplementary page table, and
 compared the start and end addresses of the new segment with
 all of the old pages. For any pair of extents a1-a2 and b1-b2,
-there is no overlap if 
+there is no overlap if
     whenever a1 < b2, b1 >= a2 and vice versa.
     That is, whenever a starts before b ends, b starts after a ends.
 We just check that this is the case for all pages currently mapped. This
@@ -315,7 +339,8 @@ upon a pagefault, it reads it into memory differently on
 the contents of spte->is_mmap: they both have SPT_FILESYS for
 their read status but loaded files have SPT_SWAP as it's write_status and
 the mmapped files have SPT_FILESYS.
-			   SURVEY QUESTIONS
+
+         SURVEY QUESTIONS
 			   ================
 
 Answering these questions is optional, but it will help us improve the
@@ -329,7 +354,10 @@ website.
 This took a huge amount of time, and it was very hard. Debugging was
 possible, but very difficult and required a very methodical and slow
 approach. Alternately, the radical approach of starting over from scratch
-also worked. There was very little middle ground.
+also worked. There was very little middle ground. Also compared to
+assignments 3 and 4 (threads and user programs), this assignment took
+much longer (we spent at least twice as much time on this assignment compared
+to either 3 or 4).
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
