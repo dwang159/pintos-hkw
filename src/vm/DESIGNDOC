@@ -118,6 +118,10 @@ a frame and goes along its way until it is given one.
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+It enabled us efficient lookup of a wide number of mappings, and
+switiching on the read_status and write_status on either faults
+or eviction allowed us to have a pretty uniform treatment of entries
+whether coming from 0, a loaded file, or a mapped file.
 
 		       PAGING TO AND FROM DISK
 		       =======================
