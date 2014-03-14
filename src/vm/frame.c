@@ -126,6 +126,8 @@ void *frame_get(void *uaddr, bool writable) {
         pagedir_clear_page(fe->owner->pagedir, (void *) fe->ukey);
         // Old page is no longer needed.
         free(fe);
+        // Remove this frame from the frame table.
+        frame_remove(key);
     }
     // Create a new frame and insert it into the frame table.
     fe = frame_create_entry(key);
