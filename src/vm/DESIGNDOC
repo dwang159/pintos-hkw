@@ -104,11 +104,15 @@ with the contents numbered `slot.`
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
 
+We avoid this issue by using dirty bits looked up in 
+thread_current()->pagedir.
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
-We used a lock around the frame allocator.
+We used a lock around the frame allocator. If A and B fault at around
+the same time, one of them will have to wait until the other is given
+a frame and goes along its way until it is given one.
 
 ---- RATIONALE ----
 
@@ -136,6 +140,7 @@ We used a lock around the frame allocator.
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+
 
 ---- SYNCHRONIZATION ----
 
