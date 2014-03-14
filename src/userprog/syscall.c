@@ -482,6 +482,7 @@ mapid_t sys_mmap(int fd, void *uaddr) {
         spt_update_status(se, SPT_FILESYS, SPT_SWAP, true);
         spt_update_filesys(se, hidden, ofs, page_read_bytes, 
                 page_zero_bytes);
+        se->is_mmap = true;
         spt_insert(curr->spt, se);
 
         /* Advance */

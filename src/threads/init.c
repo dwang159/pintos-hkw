@@ -40,6 +40,7 @@
 #ifdef VM
 
 #include "vm/frame.h"
+#include "vm/swap.h"
 
 #endif /* VM */
 

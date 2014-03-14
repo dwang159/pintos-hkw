@@ -62,10 +62,9 @@ struct frame_entry *frame_create_entry(unsigned key) {
         return NULL;
 
     fe->key = key;
+    ASSERT(fe->key);
     fe->owner = thread_current();
-    if (!fe->owner) {
-        PANIC("Init\n");
-    }
+    ASSERT(fe->owner);
     return fe;
 }
 
@@ -125,13 +124,12 @@ void *frame_get(void *uaddr, bool writable) {
     } else {
         // Choose a page to evict.
         fe = evict();
-        bool dirty = pagedir_is_dirty(fe->owner->pagedir, (void *)fe->ukey);
         ASSERT(fe->owner);
+        ASSERT(fe->key);
         key = fe->key;
         kpage = (void *) key;
-        // Choose a page to evict.
         // If necessary, write back the contents of this frame.
-        frame_writeback(fe, dirty, false);
+        frame_writeback(fe, false);
         // Unmap this page.
         pagedir_clear_page(fe->owner->pagedir, (void *) fe->ukey);
         frame_remove(key);
@@ -145,6 +143,8 @@ void *frame_get(void *uaddr, bool writable) {
     fe->owner = thread_current();
     ASSERT(fe->owner);
     fe->ukey = ukey;
+    ASSERT(fe->owner);
+    ASSERT(fe->ukey);
     frame_insert(fe);
     // Associate the user page with the returned kpage.
     install_page(upage, kpage, writable);
@@ -205,11 +205,12 @@ struct frame_entry *evict_first() {
     // If none were found, return the last one we saw.
     ASSERT(fe);
     ASSERT(fe->owner);
+    ASSERT(fe->key);
     return fe;
 }
 
 /* Write back a frame to either swap or file. */
-void frame_writeback(struct frame_entry *fe, bool dirty, bool full_exit) {
+void frame_writeback(struct frame_entry *fe, bool full_exit) {
     struct spt_entry *spte;
     void *kpage, *upage;
     ASSERT(fe);

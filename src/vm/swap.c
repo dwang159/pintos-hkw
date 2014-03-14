@@ -8,8 +8,6 @@
 #include "lib/debug.h"
 #include "lib/kernel/bitmap.h"
 
-#include "vm/frame.h"
-
 static struct lock swap_table_lock;
 static struct bitmap *swap_table;
 static struct block *swap_dev;
