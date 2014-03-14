@@ -52,6 +52,7 @@ struct spt_entry {
     } data;
 
     bool writable;
+    bool is_mmap;
 };
 
 /* Create a new page table. */

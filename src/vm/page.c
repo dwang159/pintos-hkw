@@ -65,6 +65,7 @@ struct spt_entry *spt_create_entry(unsigned key) {
     // Initialize as invalid.
     spte->read_status = SPT_INVALID;
     spte->write_status = SPT_INVALID;
+    spte->is_mmap = false;
     return spte;
 }
 
