@@ -190,7 +190,6 @@ static void page_fault(struct intr_frame *f) {
                 if (file_read(file, kpage, page_read_bytes) !=
                         (int) page_read_bytes) {
                     palloc_free_page(kpage);
-                    printf("last words\n");
                     sys_exit(-1);
                 }
                 /* Zero the proper bytes in the page */
