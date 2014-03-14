@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+#include "vm/page.h"
+#include "vm/fmap.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -125,6 +127,12 @@ struct thread {
     /**@{*/
 #endif
 
+#ifdef VM
+    //Supplemental page table
+    struct spt_table *spt;
+    struct fmap_table *fmap;
+    void *esp;  /* esp of a syscall process. */
+#endif
     // File descriptor table.
     struct vector files;
 

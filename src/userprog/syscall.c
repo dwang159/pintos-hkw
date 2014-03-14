@@ -1,17 +1,24 @@
-#include "userprog/syscall.h"
+#include <round.h>
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "pagedir.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
-#include "process.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/exception.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 
+#ifdef VM
+#include "vm/page.h"
+#include "vm/fmap.h"
+#include "vm/frame.h"
+#endif /* VM */
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
  */
@@ -35,6 +42,7 @@ static void syscall_handler(struct intr_frame *f) {
     void *esp = f->esp;
     void *args;
     bool args_valid = true;
+    thread_current()->esp = esp;
 
     /* Check pointer validity */
     if (!check_args_1(esp, int)) {
@@ -141,6 +149,22 @@ static void syscall_handler(struct intr_frame *f) {
         else
             args_valid = false;
         break;
+#ifdef VM
+    case SYS_MMAP:
+        if (check_args_2(args, int, void*)) {
+            off1 = sizeof(int);
+            f->eax = sys_mmap(*((int *) args),
+                              *((void **) (args + off1)));
+        } else
+            args_valid =false;
+        break;
+    case SYS_MUNMAP:
+        if (check_args_1(args, mapid_t))
+            sys_munmap(*((mapid_t *) args));
+        else
+            args_valid = false;
+        break;
+#endif
     default:
         args_valid = false;
         break;
@@ -154,8 +178,22 @@ static void syscall_handler(struct intr_frame *f) {
 
 /* Checks that addr points into user space on a currently mapped page. */
 bool mem_valid(const void *addr) {
+#ifdef VM
+    return addr != NULL &&
+        spt_lookup(thread_current()->spt, spt_get_key(addr)) != NULL;
+#else /* No VM */
     return (addr != NULL && is_user_vaddr(addr) &&
             pagedir_get_page(thread_current()->pagedir, addr) != NULL);
+#endif
+}
+
+bool mem_writable(const void *addr) {
+    if (mem_valid(addr)) {
+        unsigned key = spt_get_key(addr);
+        struct spt_entry *se = spt_lookup(thread_current()->spt, key);
+        return se && se->writable;
+    }
+    return false;
 }
 
 /* Checks if the file descriptor is valid. */
@@ -179,6 +217,8 @@ void sys_halt() {
 void sys_exit(int status) {
     // Set the exit status.
     struct thread *t = thread_current();
+    
+    spt_reclaim_table(t->spt);
 
     // Print exit message.
     printf("%s: exit(%d)\n", t->name, status);
@@ -186,6 +226,7 @@ void sys_exit(int status) {
     // Set exit status.
     struct exit_state *es = thread_exit_status.data[t->tid];
     es->exit_status = status;
+
 
     // Do the rest of the exit process.
     thread_exit();
@@ -285,10 +326,15 @@ int sys_filesize(int fd) {
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
     struct thread *curr = thread_current();
-
-    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
-            fd == STDOUT_FILENO || !fd_valid(fd))
+    void *esp = thread_current()->esp;
+    if (fd == STDOUT_FILENO || !fd_valid(fd)) {
         sys_exit(-1);
+    }
+    if (!possibly_stack(esp, buffer)) {
+        if (!mem_writable(buffer) || !mem_writable(buffer + size - 1)) {
+            sys_exit(-1);
+        }
+    }
 
     if (fd == STDIN_FILENO) {
         for (i = 0; i < size; i++) {
@@ -357,3 +403,119 @@ void sys_close(int fd)
     lock_release(&filesys_lock);
     curr->files.data[fd] = NULL;
 }
+
+#ifdef VM
+/** Project 5 handlers */
+/* Mays a file specified by fdinto consecutive
+ * virtual pages starting at addr. */
+mapid_t sys_mmap(int fd, void *uaddr) {
+    // Check that the address is in user memory.
+    if (uaddr == NULL) {
+        return -1;
+    }
+    if  (uaddr == NULL || !is_user_vaddr(uaddr)) {
+        sys_exit(-1);
+    }
+
+    // Can't open an invalid file.
+    if (!fd_valid(fd)) {
+        return -1;
+    }
+    
+    // Check that the address is page aligned
+    if (pg_ofs(uaddr)) {
+        return -1;
+        sys_exit(-1);
+    }
+
+    struct file *file = thread_current()->files.data[fd];
+    struct file *hidden= file_reopen(file);
+    lock_acquire(&filesys_lock);
+    off_t len = file_length(hidden);
+    lock_release(&filesys_lock);
+
+    // Doesn't bother with zero length files.
+    if (len == 0 ) {
+        return -1;
+    }
+    // Fail if the file is too large to fit in user memory.
+    if  (!is_user_vaddr(uaddr + len)) {
+        sys_exit(-1);
+    }
+    struct thread *curr = thread_current();
+
+    struct hash_iterator i;
+    void *new_beg = uaddr;
+    void *new_end = (void *)ROUND_UP((int) uaddr + len, PGSIZE);
+    void *old_beg, *old_end;
+    hash_first(&i, &curr->spt->data);
+    while (hash_next (&i)) {
+        struct spt_entry *se = hash_entry(hash_cur(&i), struct spt_entry,
+                elem);
+        old_beg = (void *) se->key;
+        old_end = (void *) se->key + PGSIZE;
+        /* If the new section starts before the end of the first,
+         * make sure it ends before the first begins */
+        if (new_beg < old_end && new_end >= old_beg) {
+            return -1;
+        }
+        /* Likewise in the other direction */
+        if (old_beg < new_end && old_end >= new_beg) {
+            return -1;
+        }
+    }
+        
+
+    struct spt_entry *se;
+    uint32_t read_bytes = (uint32_t) len;
+    uint32_t zero_bytes = ROUND_UP(read_bytes, PGSIZE) - read_bytes;
+    size_t page_read_bytes;
+    size_t page_zero_bytes;
+    off_t ofs = 0;
+    unsigned num_pages = 0;
+    void *read_addr = uaddr;
+    while (read_bytes > 0 || zero_bytes > 0) {
+        num_pages++;
+        page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        page_zero_bytes = PGSIZE - page_read_bytes;
+        se = spt_create_entry(spt_get_key(read_addr));
+        spt_update_status(se, SPT_FILESYS, SPT_SWAP, true);
+        spt_update_filesys(se, hidden, ofs, page_read_bytes, 
+                page_zero_bytes);
+        se->is_mmap = true;
+        spt_insert(curr->spt, se);
+
+        /* Advance */
+        read_bytes -= page_read_bytes;
+        zero_bytes -= page_zero_bytes;
+        ofs += PGSIZE;
+        read_addr += PGSIZE;
+    }
+    mapid_t key = fmap_generate_id();
+    struct fmap_entry *fme = fmap_create_entry(key);
+    // Need to keep the inode open even if the callee closes .
+    fmap_update(fme, fd, uaddr, hidden, num_pages);
+    fmap_insert(curr->fmap, fme);
+    return key;
+}
+
+/* Unmaps the file-memory correspondence associated with
+ * `mapping.` */
+void sys_munmap(mapid_t mapping) {
+    struct thread *curr = thread_current();
+    struct fmap_entry *fme = fmap_lookup(curr->fmap, mapping);
+    void *uaddr = fme->addr;
+    ASSERT(pg_ofs(uaddr) == 0);
+    unsigned count = fme->num_pages;
+    unsigned key;
+    while(count--) {
+        // Remove each spt entry associated with the mapping.
+        key = spt_get_key(uaddr);
+        struct spt_entry *spe = spt_lookup(curr->spt, key);
+        spt_writeback(spe, false);
+        spt_update_status(spe, SPT_INVALID, SPT_SWAP, false);
+        uaddr += PGSIZE;
+    }
+    file_close(fme->hidden);
+}
+#endif /* VM */
