@@ -131,20 +131,62 @@ whether coming from 0, a loaded file, or a mapped file.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+Lock for the swap table, preventing simultaneous access
+static struct lock swap_table_lock;
+
+Bitmap representing filled swap slots in the swap table
+static struct bitmap *swap_table;
+
+The swap partition
+static struct block *swap_dev;
+
+/* Contains all elements of the frame table. */
+struct frame_table {
+    struct hash data;
+};
+
+/* An element of the frame table. */
+struct frame_entry {
+    // Element used to store entry in frame table.
+    struct hash_elem elem;
+
+    // Key used to identify page. This is a pointer to a kernel page,
+    // and the key is retrieved using frame_get_key().
+    unsigned key;
+
+    // Thread and key for the supplemental page table associated with
+    // this frame.
+    struct thread *owner;
+    unsigned ukey;
+};
 
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
+Our algorithm represents a modified second-chance policy. Rather than choose
+the first frame we see if all pages have been accessed, we choose the last
+one that we see. Otherwise, our algorithm should behave the same. We iterate
+through the members of the frame table, setting the accessed bit to false if
+it is set and evicting otherwise. 
 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
+We clear the page in the pagedir when a frame is evicted, and we destroy
+the previous frame entry. Then, we add a frame to the table in the proper
+place, treating it as though it were a normal insertion into the frame table.
+TODO DK
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
-
+We define a maximum size for the stack (8MB), and define a STACK_HEURISTIC 
+value (set at 32 currently). Then, in the page fault handler, if no spt
+entry exists for the address, we check if the address is >= to
+esp - STACK_HEURISTIC and PHYS_BASE - MAX_STACK and that the address is
+less than PHYS_BASE. If this is true, we determine that it is a stack
+access and grow the stack.
 
 ---- SYNCHRONIZATION ----
 
@@ -152,22 +194,39 @@ whether coming from 0, a loaded file, or a mapped file.
 >> particular, explain how it prevents deadlock.  (Refer to the
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
+We lock the 2 global structures (frame and swap) any time we access them, 
+making it so only one process can interact with it at any time. We acquire
+the lock whenever we access that particular data structure in other kernel
+code. To prevent deadlock, we ensure that any calls between the code of our 
+data structures doesn't attempt to acquire a lock multiple times. We further
+avoid calling functions in our data structures that acquire other data
+structures' locks. For example, we call swap functions from frame, but
+we avoid obtaining the frame lock in swap, making it so deadlock cannot occur.
 
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+Because the frame table is locked until P finishes evicting, Q will not
+fault the frame back in until P has finished evicting it.
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
+Again, the frame table is locked while reading a page in, so Q cannot evict
+that frame until P finishes reading it in.
 
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+We use the page fault to bring in pages, treating it exactly like virtual
+addresses. When we attempt to access an invalid virtual address, if it is
+in the supplemental page table, we fault it in. If it is a stack page, we
+allocate a new zeroed page. If it is entirely invalid, we kill the user
+process that tried to access the address.
 
 ---- RATIONALE ----
 
@@ -177,6 +236,13 @@ whether coming from 0, a loaded file, or a mapped file.
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+We only lock the global structures (which makes sense, as these are the
+only ones that can be accessed by multiple threads). This is still
+relatively coarse, since we lock the entire frame and swap table, but
+it guarantees absence of race conditions, which is highly desirable
+when debugging. Finer locking would result in more parallelism, but we
+already struggled greatly to debug this project, so it is also 
+probably impossible in the given time frame.
 
 			 MEMORY MAPPED FILES
 			 ===================
@@ -259,7 +325,8 @@ website.
 >> in it, too easy or too hard?  Did it take too long or too little time?
 This took a huge amount of time, and it was very hard. Debugging was
 possible, but very difficult and required a very methodical and slow
-approach.
+approach. Alternately, the radical approach of starting over from scratch
+also worked. There was very little middle ground.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
