@@ -193,7 +193,7 @@ struct frame_entry *evict_first() {
     hash_first(&hi, &ft.data);
     while (hash_next(&hi)) {
         fe = hash_entry(hash_cur(&hi), struct frame_entry, elem);
-        ASSERT(fe->owner);
+        ASSERT(fe->owner == thread_current());
         // Check if accessed.
         if (!pagedir_is_accessed(fe->owner->pagedir, (void *) fe->ukey)) {
             return fe;
