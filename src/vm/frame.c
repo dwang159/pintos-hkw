@@ -87,6 +87,7 @@ struct frame_entry *frame_lookup(unsigned key) {
     ASSERT(cmp);
     ASSERT(cmp->owner);
     e = hash_find(&ft.data, &cmp->elem);
+    frame_remove(key);
     free(cmp);
 
     if (!e)
@@ -124,12 +125,13 @@ void *frame_get(void *uaddr, bool writable) {
     } else {
         // Choose a page to evict.
         fe = evict();
+        bool dirty = pagedir_is_dirty(fe->owner->pagedir, (void *)fe->ukey);
         ASSERT(fe->owner);
         key = fe->key;
         kpage = (void *) key;
         // Choose a page to evict.
         // If necessary, write back the contents of this frame.
-        frame_writeback(fe, false);
+        frame_writeback(fe, dirty, false);
         // Unmap this page.
         pagedir_clear_page(fe->owner->pagedir, (void *) fe->ukey);
         frame_remove(key);
@@ -207,7 +209,7 @@ struct frame_entry *evict_first() {
 }
 
 /* Write back a frame to either swap or file. */
-void frame_writeback(struct frame_entry *fe, bool full_exit) {
+void frame_writeback(struct frame_entry *fe, bool dirty, bool full_exit) {
     struct spt_entry *spte;
     void *kpage, *upage;
     ASSERT(fe);
@@ -235,9 +237,10 @@ void frame_writeback(struct frame_entry *fe, bool full_exit) {
 
         // Clear the dirty bit.
         pagedir_set_dirty(fe->owner->pagedir, upage, false);
-        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, spte->writable);
+        spt_update_status(spte, SPT_FILESYS, SPT_SWAP, spte->writable);
         break;
     default:
-        ; // I don't think panicking is appropriate here. Maybe not?
+        PANIC("No writebacks!\n");
+        printf("Invalid\n"); // I don't think panicking is appropriate here. Maybe not?
     }
 }

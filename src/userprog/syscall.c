@@ -479,7 +479,7 @@ mapid_t sys_mmap(int fd, void *uaddr) {
         page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         page_zero_bytes = PGSIZE - page_read_bytes;
         se = spt_create_entry(spt_get_key(read_addr));
-        spt_update_status(se, SPT_FILESYS, SPT_FILESYS, true);
+        spt_update_status(se, SPT_FILESYS, SPT_SWAP, true);
         spt_update_filesys(se, hidden, ofs, page_read_bytes, 
                 page_zero_bytes);
         spt_insert(curr->spt, se);
@@ -507,24 +507,14 @@ void sys_munmap(mapid_t mapping) {
     ASSERT(pg_ofs(uaddr) == 0);
     unsigned count = fme->num_pages;
     unsigned key;
-    struct frame_entry *fe;
     while(count--) {
-        void *kpage = pagedir_get_page(curr->pagedir, uaddr);
-        if (kpage) {
-            key = frame_get_key(kpage);
-            fe = frame_lookup(key);
-            frame_writeback(fe, false);
-            frame_remove(key);
-            pagedir_clear_page(curr->pagedir, uaddr);
-        }
+        // Remove each spt entry associated with the mapping.
         key = spt_get_key(uaddr);
         struct spt_entry *spe = spt_lookup(curr->spt, key);
-        spt_update_status(spe, SPT_INVALID, SPT_INVALID, false);
+        spt_writeback(spe, false);
+        spt_update_status(spe, SPT_INVALID, SPT_SWAP, false);
         uaddr += PGSIZE;
     }
-    // Write back all the frames
-    // remove all from spt
-    //  
     file_close(fme->hidden);
 }
 #endif /* VM */

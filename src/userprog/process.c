@@ -506,7 +506,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
         struct thread *curr = thread_current();
         struct spt_entry *spte = spt_create_entry(spt_get_key(upage));
-        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, writable);
+        spt_update_status(spte, SPT_FILESYS, SPT_SWAP, writable);
         spt_update_filesys(spte, file, ofs, page_read_bytes, page_zero_bytes);
         spt_insert(curr->spt, spte);
 

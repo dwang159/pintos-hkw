@@ -177,7 +177,9 @@ static void page_fault(struct intr_frame *f) {
             // Get the data from the appropriate location.
             case SPT_ZERO:
                 memset(kpage, 0, PGSIZE);
-                spt_update_status(spte, SPT_INVALID, SPT_SWAP, spte->writable);
+                PANIC("Not reached, maybe.\n");
+                spt_update_status(spte, SPT_INVALID, SPT_SWAP,
+                    spte->writable);
                 break;
             case SPT_FILESYS:
                 page_read_bytes = spte->data.fdata.read_bytes;
@@ -189,6 +191,7 @@ static void page_fault(struct intr_frame *f) {
                 if (file_read(file, kpage, page_read_bytes) !=
                         (int) page_read_bytes) {
                     palloc_free_page(kpage);
+                    printf("last words\n");
                     sys_exit(-1);
                 }
                 /* Zero the proper bytes in the page */
@@ -196,12 +199,13 @@ static void page_fault(struct intr_frame *f) {
 
                 // Update the page status. If not writable, it should be
                 // written to swap on eviction. Otherwise write back to file.
-                spt_update_status(spte, SPT_FILESYS,
-                        SPT_FILESYS, spte->writable);
+                spt_update_status(spte, SPT_FILESYS, SPT_SWAP,
+                        spte->writable);
                 break;
             case SPT_SWAP:
                 swap_free_and_read(kpage, spte->data.slot);
                 spt_update_status(spte, SPT_SWAP, SPT_SWAP, spte->writable);
+                // Todo: add to frame table?
                 break;
             default:
                 sys_exit(-1);

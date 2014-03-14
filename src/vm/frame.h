@@ -47,6 +47,6 @@ void *frame_get(void *uaddr, bool writeable);
 unsigned frame_get_key(void *kaddr);
 
 /* Clears the contents of the frame. */
-void frame_writeback(struct frame_entry *fe, bool full_exit);
+void frame_writeback(struct frame_entry *fe, bool dirty, bool full_exit);
 
 #endif /* VM_FRAME_H */
