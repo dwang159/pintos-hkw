@@ -28,7 +28,8 @@ void filesys_init(bool format) {
     free_map_open();
 }
 
-/*! Shuts down the file system module, writing any unwritten data to disk. */
+/*! Shuts down the file system module, writing any unwritten data to disk.
+    */
 void filesys_done(void) {
     free_map_close();
 }
@@ -64,9 +65,9 @@ struct file * filesys_open(const char *name) {
     return file_open(inode);
 }
 
-/*! Deletes the file named NAME.  Returns true if successful, false on failure.
-    Fails if no file named NAME exists, or if an internal memory allocation
-    fails. */
+/*! Deletes the file named NAME.  Returns true if successful, false on
+ *  failure.  Fails if no file named NAME exists, or if an internal
+ *  memory allocation fails. */
 bool filesys_remove(const char *name) {
     struct dir *dir = dir_open_root();
     bool success = dir != NULL && dir_remove(dir, name);

@@ -20,8 +20,7 @@ struct file * file_open(struct inode *inode) {
         file->pos = 0;
         file->deny_write = false;
         return file;
-    }
-    else {
+    } else {
         inode_close(inode);
         free(file);
         return NULL; 
@@ -58,30 +57,31 @@ off_t file_read(struct file *file, void *buffer, off_t size) {
     return bytes_read;
 }
 
-/*! Reads SIZE bytes from FILE into BUFFER, starting at offset FILE_OFS in the
-    file.  Returns the number of bytes actually read, which may be less than
-    SIZE if end of file is reached.  The file's current position is
-    unaffected. */
+/*! Reads SIZE bytes from FILE into BUFFER, starting at offset FILE_OFS in
+    the file.  Returns the number of bytes actually read, which may be
+    less than SIZE if end of file is reached.  The file's current position
+    is unaffected. */
 off_t file_read_at(struct file *file, void *buffer, off_t size,
                    off_t file_ofs) {
     return inode_read_at(file->inode, buffer, size, file_ofs);
 }
 
 /*! Writes SIZE bytes from BUFFER into FILE, starting at the file's current
-    position.  Returns the number of bytes actually written, which may be less
-    than SIZE if end of file is reached.  (Normally we'd grow the file in that
-    case, but file growth is not yet implemented.)
+    position.  Returns the number of bytes actually written, which may be
+    less than SIZE if end of file is reached.  (Normally we'd grow the
+    file in that case, but file growth is not yet implemented.)
     Advances FILE's position by the number of bytes read. */
 off_t file_write(struct file *file, const void *buffer, off_t size) {
-    off_t bytes_written = inode_write_at(file->inode, buffer, size, file->pos);
+    off_t bytes_written = inode_write_at(file->inode, buffer, size, 
+            file->pos);
     file->pos += bytes_written;
     return bytes_written;
 }
 
-/*! Writes SIZE bytes from BUFFER into FILE, starting at offset FILE_OFS in
-    the file.  Returns the number of bytes actually written, which may be less
-    than SIZE if end of file is reached.  (Normally we'd grow the file in that
-    case, but file growth is not yet implemented.)
+/*! Writes SIZE bytes from BUFFER into FILE, starting at offset FILE_OFS
+    in the file.  Returns the number of bytes actually written, which may
+    be less than SIZE if end of file is reached.  (Normally we'd grow the
+    file in that case, but file growth is not yet implemented.)
     The file's current position is unaffected. */
 off_t file_write_at(struct file *file, const void *buffer, off_t size,
                     off_t file_ofs) {

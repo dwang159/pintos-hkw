@@ -79,7 +79,7 @@ static bool lookup(const struct dir *dir, const char *name,
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
+    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
          ofs += sizeof(e)) {
         if (e.in_use && !strcmp(name, e.name)) {
             if (ep != NULL)
@@ -92,10 +92,11 @@ static bool lookup(const struct dir *dir, const char *name,
     return false;
 }
 
-/*! Searches DIR for a file with the given NAME and returns true if one exists,
-    false otherwise.  On success, sets *INODE to an inode for the file,
-    otherwise to a null pointer.  The caller must close *INODE. */
-bool dir_lookup(const struct dir *dir, const char *name, struct inode **inode) {
+/*! Searches DIR for a file with the given NAME and returns true if one
+    exists, false otherwise.  On success, sets *INODE to an inode for the
+    file, otherwise to a null pointer.  The caller must close *INODE. */
+bool dir_lookup(const struct dir *dir, const char *name,
+        struct inode **inode) {
     struct dir_entry e;
 
     ASSERT(dir != NULL);
@@ -137,8 +138,8 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
        inode_read_at() will only return a short read at end of file.
        Otherwise, we'd need to verify that we didn't get a short
        read due to something intermittent such as low memory. */
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
-         ofs += sizeof(e)) {
+    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
+            ofs += sizeof(e)) {
         if (!e.in_use)
             break;
     }
@@ -187,12 +188,13 @@ done:
     return success;
 }
 
-/*! Reads the next directory entry in DIR and stores the name in NAME.  Returns
-    true if successful, false if the directory contains no more entries. */
+/*! Reads the next directory entry in DIR and stores the name in NAME.
+    Returns true if successful, false if the directory contains no more
+    entries. */
 bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
     struct dir_entry e;
 
-    while (inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
+    while(inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
         dir->pos += sizeof(e);
         if (e.in_use) {
             strlcpy(name, e.name, NAME_MAX + 1);
@@ -201,4 +203,3 @@ bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
     }
     return false;
 }
-
