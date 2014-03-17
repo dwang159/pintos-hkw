@@ -1,11 +1,14 @@
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
 #include "devices/block.h"
+#include "devices/timer.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+#include "lib/random.h"
 #include <stdio.h>
 #include <string.h>
 
-#define BUF_NUM_SLOTS 1
+#define BUF_NUM_SLOTS 64
 
 /* Flags to describe state of a slot in the filesystem buffer. */
 #define FS_BUF_UNUSED 0
@@ -19,6 +22,8 @@ struct cache_slot {
     char content[BLOCK_SECTOR_SIZE];
 };
 
+static pid_t daemon_pid;
+static bool daemon_should_live;
 static struct cache_slot fs_buffer[BUF_NUM_SLOTS];
 static char bounce[BLOCK_SECTOR_SIZE];
 
@@ -35,6 +40,7 @@ static void set_inuse(int slot);
 static void set_dirty(int slot);
 static bool is_dirty(int slot);
 static bool is_inuse(int slot);
+static void cache_daemon(void *aux);
 
 /* Reads the filesys sector sect into addr. Starts at offset into the
  * sector and reads size bytes. This is a read of at most *one* sector.
@@ -49,8 +55,6 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
     if ((slot_id = buff_lookup(sect)) != -1) {
         ASSERT(fs_buffer[slot_id].sect_id == sect);
         buff_actual = fs_buffer[slot_id].content;
-        check_equal(sect, slot_id);
-        block_read(fs_device, sect, buff_actual);
         check_equal(sect, slot_id);
     } else {
         slot_id = force_empty_slot();
@@ -85,19 +89,12 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
     if ((slot_id = buff_lookup(sect)) != -1) {
         ASSERT(fs_buffer[slot_id].sect_id == sect);
         ASSERT(is_inuse(slot_id));
-        set_dirty(slot_id);
         buff_actual = fs_buffer[slot_id].content;
-        if (offset > 0 || offset + size < BLOCK_SECTOR_SIZE) {
-            block_read(fs_device, sect, buff_actual);
-        } else {
-            memset(buff_actual, 0, BLOCK_SECTOR_SIZE);
-        }
-        memcpy(buff_actual + offset, addr, size);
-        writeback(slot_id);
-        check_equal(sect, slot_id);
+        set_dirty(slot_id);
     } else {
         slot_id = force_empty_slot();
-        ASSERT(!slot_id);
+        ASSERT(slot_id >= 0);
+        ASSERT(slot_id < BUF_NUM_SLOTS);
         fs_buffer[slot_id].sect_id = sect;
         set_inuse(slot_id);
         set_dirty(slot_id);
@@ -107,10 +104,10 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
         } else {
             memset(buff_actual, 0, BLOCK_SECTOR_SIZE);
         }
-        memcpy(buff_actual + offset, addr, size);
-        writeback(slot_id);
-        check_equal(sect, slot_id);
     }
+    ASSERT(is_dirty(slot_id));
+    memcpy(buff_actual + offset, addr, size);
+    check_equal(sect, slot_id);
 }
 
 void print_slot(int id) {
@@ -138,7 +135,7 @@ int buff_lookup(block_sector_t sect) {
 bool is_slot_empty(int slot_id) {
     return !(fs_buffer[slot_id].flags & FS_BUF_INUSE);
 }
-void write_all(void) {
+void cache_writeback_all(void) {
     int i;
     for (i = 0; i < BUF_NUM_SLOTS; i++) {
         writeback(i);
@@ -152,20 +149,33 @@ int force_empty_slot(void) {
         writeback(ret);
     }
     ASSERT(fs_buffer[ret].flags == FS_BUF_UNUSED);
-    ASSERT(!ret);
+    ASSERT(ret >= 0);
+    ASSERT(ret < BUF_NUM_SLOTS);
     return ret;
 }
-
+static int count = 0;
 int choice_to_evict(void) {
-    return 0;
+    //random_init((unsigned) timer_ticks());
+    //int num = (int) (random_ulong() % BUF_NUM_SLOTS);
+    int num;
+    num = count % BUF_NUM_SLOTS;
+    ASSERT(num >= 0);
+    ASSERT(num < BUF_NUM_SLOTS);
+    count++;
+    return num;
 }
 
 int passive_empty_slot(void) {
+//    int i;
+ //   for (i = 0; i < BUF_NUM_SLOTS; i++) {
+ //       if (!is_inuse(i))
+ //           return i;
+ //   }
     return -1;
 }
 
 void writeback(int cache_slot) {
-    if (fs_buffer[cache_slot].flags & FS_BUF_DIRTY) {
+    if (is_dirty(cache_slot)) {
         block_write(fs_device, fs_buffer[cache_slot].sect_id,
                 fs_buffer[cache_slot].content);
     }
@@ -197,4 +207,23 @@ bool is_dirty(int slot) {
 
 bool is_inuse(int slot) {
     return fs_buffer[slot].flags & FS_BUF_INUSE;
+}
+
+void cache_daemon(void *aux UNUSED) {
+    while (daemon_should_live) {
+        cache_writeback_all();
+        timer_sleep(100);
+    }
+}
+
+void cache_destroy(void) {
+    daemon_should_live = false;
+    cache_writeback_all();
+}
+
+
+void cache_init(void) {
+    daemon_should_live = true;
+    daemon_pid = thread_create("cache_daemon", PRI_DEFAULT, cache_daemon, 
+        NULL);
 }
