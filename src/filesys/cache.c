@@ -27,20 +27,29 @@ static bool daemon_should_live;
 static struct cache_slot fs_buffer[BUF_NUM_SLOTS];
 static char bounce[BLOCK_SECTOR_SIZE];
 
-/* Determines if a sector is in the cache. */
+/* Finds the index of the sector in the cache if present */
 static int buff_lookup(block_sector_t);
-static bool is_slot_empty(int slot_id UNUSED) UNUSED;
+
+/* Routines to find an empty slot, or create an empty slot */
 static int force_empty_slot(void);
 static int passive_empty_slot(void);
-static void writeback(int);
 static int choice_to_evict(void);
+
+/* Physical writes to the disk, if necessary. */
+static void writeback(int);
+static void writeback_all(void);
+
+/* Debugging routine that ensures the contents of the sector
+ * is identical to the contents of the slot, unless the slot is
+ * dirty. */
 static void check_equal(block_sector_t sect, int slot_id);
-static void print_slot(int);
+
+// Flag access and mutation routines
 static void set_inuse(int slot);
 static void set_dirty(int slot);
+static void clear_dirty(int slot);
 static bool is_dirty(int slot);
 static bool is_inuse(int slot);
-static void cache_daemon(void *aux);
 
 /* Reads the filesys sector sect into addr. Starts at offset into the
  * sector and reads size bytes. This is a read of at most *one* sector.
@@ -109,20 +118,13 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
     memcpy(buff_actual + offset, addr, size);
     check_equal(sect, slot_id);
 }
-
-void print_slot(int id) {
-    struct cache_slot c = fs_buffer[id];
-    printf("id: %d sect: %d accessed: %d dirty: %u inuse: %u",
-        id, c.sect_id, c.flags & FS_BUF_ACCESSED, c.flags & FS_BUF_DIRTY,
-                c.flags & FS_BUF_INUSE);
-}
         
 /* Finds the slot that the sector is loaded into, returns
  * -1 on inability to locate it. */
 int buff_lookup(block_sector_t sect) {
     int i;
     for (i = 0; i < BUF_NUM_SLOTS; i++) {
-        if (is_slot_empty(i)) {
+        if (!is_inuse(i)) {
             continue;
         }
         if (fs_buffer[i].sect_id == sect) {
@@ -132,15 +134,6 @@ int buff_lookup(block_sector_t sect) {
     return -1;
 }
 
-bool is_slot_empty(int slot_id) {
-    return !(fs_buffer[slot_id].flags & FS_BUF_INUSE);
-}
-void cache_writeback_all(void) {
-    int i;
-    for (i = 0; i < BUF_NUM_SLOTS; i++) {
-        writeback(i);
-    }
-}
 
 int force_empty_slot(void) {
     int ret = passive_empty_slot();
@@ -153,33 +146,37 @@ int force_empty_slot(void) {
     ASSERT(ret < BUF_NUM_SLOTS);
     return ret;
 }
-static int count = 0;
-int choice_to_evict(void) {
-    //random_init((unsigned) timer_ticks());
-    //int num = (int) (random_ulong() % BUF_NUM_SLOTS);
-    int num;
-    num = count % BUF_NUM_SLOTS;
-    ASSERT(num >= 0);
-    ASSERT(num < BUF_NUM_SLOTS);
-    count++;
-    return num;
-}
 
 int passive_empty_slot(void) {
-//    int i;
- //   for (i = 0; i < BUF_NUM_SLOTS; i++) {
- //       if (!is_inuse(i))
- //           return i;
- //   }
+    int i;
+    for (i = 0; i < BUF_NUM_SLOTS; i++) {
+        if (!is_inuse(i))
+            return i;
+    }
     return -1;
+}
+int choice_to_evict(void) {
+    random_init((unsigned) timer_ticks());
+    int num = (int) (random_ulong() % BUF_NUM_SLOTS);
+    ASSERT(num >= 0);
+    ASSERT(num < BUF_NUM_SLOTS);
+    return num;
 }
 
 void writeback(int cache_slot) {
     if (is_dirty(cache_slot)) {
         block_write(fs_device, fs_buffer[cache_slot].sect_id,
                 fs_buffer[cache_slot].content);
+        clear_dirty(cache_slot);
     }
     fs_buffer[cache_slot].flags = FS_BUF_UNUSED;
+}
+
+void writeback_all(void) {
+    int i;
+    for (i = 0; i < BUF_NUM_SLOTS; i++) {
+        writeback(i);
+    }
 }
 
 void check_equal(block_sector_t sect, int slot_id) {
@@ -201,6 +198,10 @@ void set_dirty(int slot) {
     fs_buffer[slot].flags |= FS_BUF_DIRTY;
 }
 
+void clear_dirty(int slot) {
+    fs_buffer[slot].flags &= !FS_BUF_DIRTY;
+}
+
 bool is_dirty(int slot) {
     return fs_buffer[slot].flags & FS_BUF_DIRTY;
 }
@@ -209,21 +210,23 @@ bool is_inuse(int slot) {
     return fs_buffer[slot].flags & FS_BUF_INUSE;
 }
 
+/* Regularly scheduled writebacks*/
+static void cache_daemon(void *aux);
 void cache_daemon(void *aux UNUSED) {
     while (daemon_should_live) {
-        cache_writeback_all();
+        writeback_all();
         timer_sleep(100);
     }
 }
 
-void cache_destroy(void) {
-    daemon_should_live = false;
-    cache_writeback_all();
-}
-
-
+/* Starts running the cache daemon at filesystem initialization */
 void cache_init(void) {
     daemon_should_live = true;
     daemon_pid = thread_create("cache_daemon", PRI_DEFAULT, cache_daemon, 
         NULL);
+}
+/* Kills the daemon when the filesystem is closed. */
+void cache_destroy(void) {
+    daemon_should_live = false;
+    writeback_all();
 }

@@ -16,6 +16,5 @@ void cache_write(block_sector_t sect, const void *source);
 
 /* Start and clean up. */
 void cache_init(void);
-void cache_writeback_all(void);
 void cache_destroy(void);
 #endif /* FILESYS_CACHE_H */
