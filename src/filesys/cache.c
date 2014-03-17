@@ -39,6 +39,10 @@ static int choice_to_evict(void);
 static void writeback(int);
 static void writeback_all(void);
 
+/* Thread func for reading ahead in the background, and caller. */
+static void read_ahead(void *aux);
+static void async_read(block_sector_t sect);
+
 /* Debugging routine that ensures the contents of the sector
  * is identical to the contents of the slot, unless the slot is
  * dirty. */
@@ -61,10 +65,11 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
     ASSERT(size + offset <= BLOCK_SECTOR_SIZE);
     char *buff_actual;
     int slot_id;
+    ASSERT(sect <= block_size(fs_device));
     if ((slot_id = buff_lookup(sect)) != -1) {
         ASSERT(fs_buffer[slot_id].sect_id == sect);
         buff_actual = fs_buffer[slot_id].content;
-        check_equal(sect, slot_id);
+        //check_equal(sect, slot_id);
     } else {
         slot_id = force_empty_slot();
         ASSERT(0 <= slot_id);
@@ -73,8 +78,9 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
         fs_buffer[slot_id].flags = FS_BUF_INUSE;
         buff_actual = fs_buffer[slot_id].content;
         block_read(fs_device, sect, buff_actual);
-        check_equal(sect, slot_id);
+        //check_equal(sect, slot_id);
     }
+    async_read(sect + 1);
     memcpy(addr, buff_actual + offset, size);
 }
 
@@ -116,7 +122,7 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
     }
     ASSERT(is_dirty(slot_id));
     memcpy(buff_actual + offset, addr, size);
-    check_equal(sect, slot_id);
+    //check_equal(sect, slot_id);
 }
         
 /* Finds the slot that the sector is loaded into, returns
@@ -217,6 +223,30 @@ void cache_daemon(void *aux UNUSED) {
         writeback_all();
         timer_sleep(100);
     }
+}
+
+static void read_ahead(void *aux) {
+    block_sector_t sect = *(block_sector_t *) aux;
+    int slot_id;
+    char *buff_actual;
+    if (sect > block_size(fs_device)) {
+        /* Don't want to read past the bounds of the device. */
+        return;
+    }
+    if ((slot_id = buff_lookup(sect)) == -1) {
+        slot_id = force_empty_slot();
+        ASSERT(0 <= slot_id);
+        ASSERT(slot_id < BUF_NUM_SLOTS);
+        fs_buffer[slot_id].sect_id = sect;
+        fs_buffer[slot_id].flags = FS_BUF_INUSE;
+        buff_actual = fs_buffer[slot_id].content;
+        block_read(fs_device, sect, buff_actual);
+        //check_equal(sect, slot_id);
+    }
+}
+
+static void async_read(block_sector_t sect) {
+    thread_create("async_read", PRI_DEFAULT, read_ahead, (void *) &sect);
 }
 
 /* Starts running the cache daemon at filesystem initialization */
