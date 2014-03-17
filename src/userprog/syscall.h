@@ -22,6 +22,14 @@ void sys_seek(int fd, unsigned int position);
 unsigned int sys_tell(int fd);
 void sys_close(int fd);
 
+/* Project 6 Syscalls */
+
+bool sys_chdir(const char *dir);
+bool sys_mkdir(const char *dir);
+bool sys_readdir(int fd, char *name);
+bool sys_isdir(int fd);
+int sys_inumber(int fd);
+
 /* Checks if memory address is valid. */
 bool mem_valid(const void *addr);
 

@@ -141,6 +141,38 @@ static void syscall_handler(struct intr_frame *f) {
         else
             args_valid = false;
         break;
+    case SYS_CHDIR:
+        if (check_args_1(args, char *))
+            f->eax = (uint32_t ) sys_chdir(*((char **) args));
+        else
+            args_valid = false;
+        break;
+    case SYS_MKDIR:
+        if (check_args_1(args, char *))
+            f->eax = (uint32_t) sys_mkdir(*((char **) args));
+        else
+            args_valid = false;
+        break;
+    case SYS_READDIR:
+        if (check_args_2(args, int, char *)) {
+            off1 = sizeof(int);
+            f->eax = (uint32_t )sys_readdir(*((int *) args),
+                                            *((char **) (args + off1)));
+        } else
+            args_valid = false;
+        break;
+    case SYS_ISDIR:
+        if (check_args_1(args, int))
+            f->eax = (uint32_t) sys_isdir(*(int *) args);
+        else
+            args_valid = false;
+        break;
+    case SYS_INUMBER:
+        if (check_args_1(args, int))
+            f->eax = (uint32_t) sys_inumber(*(int *) args);
+        else
+            args_valid = false;
+        break;
     default:
         args_valid = false;
         break;
@@ -356,4 +388,29 @@ void sys_close(int fd)
     file_close(curr->files.data[fd]);
     lock_release(&filesys_lock);
     curr->files.data[fd] = NULL;
+}
+
+bool sys_chdir(const char *dir) {
+    printf("chdir(%s)\n", dir);
+    PANIC("chdir not implemented\n");
+}
+
+bool sys_mkdir(const char *dir) {
+    printf("mkdir(%s)\n", dir);
+    PANIC("mkdir not implemnted\n");
+}
+
+bool sys_readdir(int fd, char *name) {
+    printf("readdir(%d, %s)\n", fd, name);
+    PANIC("mkdir not implemnted\n");
+}
+
+bool sys_isdir(int fd) {
+    printf("isdir(%d)\n", fd);
+    PANIC("isdir not implemented\n");
+}
+
+int sys_inumber(int fd) {
+    printf("inumber(%d)\n", fd);
+    PANIC("inumber not implemented\n");
 }
