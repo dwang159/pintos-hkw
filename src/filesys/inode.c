@@ -11,13 +11,26 @@
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
+/* Number of i_blocks. */
+#define N_BLOCKS 15
+
 /*! On-disk inode.
     Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk {
-    block_sector_t start;               /*!< First data sector. */
-    off_t length;                       /*!< File size in bytes. */
-    unsigned magic;                     /*!< Magic number. */
-    uint32_t unused[125];               /*!< Not used. */
+    // File size in bytes.
+    off_t length;
+    // Magic number used to identify inodes.
+    unsigned magic;
+    /* Block addressing, contains pointers to other blocks.
+     * 0..N_BLOCKS - 4 are direct addresses
+     * N_BLOCKS - 3 has 1-indirect addresses
+     * N_BLOCKS - 2 has 2-indirect addresses
+     * N_BLOCKS - 1 has 3-indirect addresses (unused).
+     */
+    block_sector_t i_block[N_BLOCKS];
+
+    // Fills up the rest of the space in this block.
+    char unused[BLOCK_SECTOR_SIZE - 2 * 4 - N_BLOCKS * 4];
 };
 
 /*! Returns the number of sectors to allocate for an inode SIZE
@@ -41,11 +54,46 @@ struct inode {
     Returns -1 if INODE does not contain data for a byte at offset
     POS. */
 static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
+    block_sector_t result;
+    off_t start;
+
     ASSERT(inode != NULL);
-    if (pos < inode->data.length)
-        return inode->data.start + pos / BLOCK_SECTOR_SIZE;
-    else
+    if (pos >= inode->data.length)
         return -1;
+    // The virtual block we want (the block offset within the file if
+    // the file was linear).
+    unsigned vblock = pos / BLOCK_SECTOR_SIZE;
+    // Find the actual block sector that corresponds to pos.
+    if (vblock <= N_BLOCKS - 4) {
+        // If vblock is in the range 0..N_BLOCKS - 4, then we can directly
+        // get the block that we want.
+        return inode->data.i_block[vblock];
+    } else if (vblock <= BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
+        // If vblock is in the range:
+        // NBLOCKS - 3..BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
+        // then it is accessed through 1-indirect addressing.
+        // This requires one disk access to get the block sector.
+        block_sector_t indirect_1 = inode->data.i_block[N_BLOCKS - 3];
+        start = vblock - (N_BLOCKS - 4);
+        cache_read_spec(indirect_1, &result, start, sizeof(block_sector_t));
+    } else if (vblock <= (BLOCK_SECTOR_SIZE / 4) * (BLOCK_SECTOR_SIZE / 4) +
+            BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
+        // Otherwise, if vblock is in the range:
+        // BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4 through
+        // (BLOCK_SECTOR_SIZE / 4)^2 + BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
+        // then it is accessed through 2-indirect addressing. This requires
+        // two disk accesses to get the block sector.
+        block_sector_t indirect_2 = inode->data.i_block[N_BLOCKS - 2];
+        block_sector_t indirect_1;
+        start = (vblock - (N_BLOCKS - 4)) / (BLOCK_SECTOR_SIZE / 4);
+        cache_read_spec(indirect_2, &indirect_1, start, sizeof(block_sector_t));
+
+        start = (vblock - (N_BLOCKS - 4)) % (BLOCK_SECTOR_SIZE / 4);
+        cache_read_spec(indirect_1, &result, start, sizeof(block_sector_t));
+    } else {
+        PANIC("Level 3 indirect addressing not implemented.\n");
+    }
+    return result;
 }
 
 /*! List of open inodes, so that opening a single inode twice
@@ -82,11 +130,11 @@ bool inode_create(block_sector_t sector, off_t length) {
             if (sectors > 0) {
                 static char zeros[BLOCK_SECTOR_SIZE];
                 size_t i;
-              
-                for (i = 0; i < sectors; i++) 
+
+                for (i = 0; i < sectors; i++)
                     cache_write(disk_inode->start + i, zeros);
             }
-            success = true; 
+            success = true;
         }
         free(disk_inode);
     }
@@ -106,7 +154,7 @@ struct inode * inode_open(block_sector_t sector) {
         inode = list_entry(e, struct inode, elem);
         if (inode->sector == sector) {
             inode_reopen(inode);
-            return inode; 
+            return inode;
         }
     }
 
@@ -149,15 +197,15 @@ void inode_close(struct inode *inode) {
     if (--inode->open_cnt == 0) {
         /* Remove from inode list and release lock. */
         list_remove(&inode->elem);
- 
+
         /* Deallocate blocks if removed. */
         if (inode->removed) {
             free_map_release(inode->sector, 1);
             free_map_release(inode->data.start,
-                             bytes_to_sectors(inode->data.length)); 
+                             bytes_to_sectors(inode->data.length));
         }
 
-        free(inode); 
+        free(inode);
     }
 }
 
@@ -192,7 +240,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
 
         cache_read_spec(sector_idx, buffer + bytes_read, sector_ofs,
                 chunk_size);
-      
+
         /* Advance. */
         size -= chunk_size;
         offset += chunk_size;
@@ -207,7 +255,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
     less than SIZE if end of file is reached or an error occurs.
     (Normally a write at end of file would extend the inode, but
     growth is not yet implemented.) */
-off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size, 
+off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         off_t offset) {
     const uint8_t *buffer = buffer_;
     off_t bytes_written = 0;
