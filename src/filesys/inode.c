@@ -17,6 +17,7 @@
 /*! On-disk inode.
     Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk {
+    block_sector_t start; // TODO: eventually get rid of it
     // File size in bytes.
     off_t length;
     // Magic number used to identify inodes.
@@ -30,7 +31,7 @@ struct inode_disk {
     block_sector_t i_block[N_BLOCKS];
 
     // Fills up the rest of the space in this block.
-    char unused[BLOCK_SECTOR_SIZE - 2 * 4 - N_BLOCKS * 4];
+    char unused[BLOCK_SECTOR_SIZE - 3 * 4 - N_BLOCKS * 4];
 };
 
 /*! Returns the number of sectors to allocate for an inode SIZE
@@ -60,6 +61,9 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     ASSERT(inode != NULL);
     if (pos >= inode->data.length)
         return -1;
+    // TODO: old
+    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+
     // The virtual block we want (the block offset within the file if
     // the file was linear).
     unsigned vblock = pos / BLOCK_SECTOR_SIZE;
