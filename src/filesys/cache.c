@@ -123,7 +123,7 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
         lock_release(&full_buf_lock);
         block_read(fs_device, sect, buff_actual);
     }
-    //async_read(sect + 1);
+    async_read(sect + 1);
     at_most_one();
     memcpy(addr, buff_actual + offset, size);
     slot_release(slot_id);
@@ -354,6 +354,7 @@ void read_ahead(void *aux) {
         block_read(fs_device, sect, buff_actual);
         slot_release(slot_id);
     } else {
+        slot_release(slot_id);
         lock_release(&full_buf_lock);
     }
 }
