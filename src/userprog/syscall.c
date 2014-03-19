@@ -13,6 +13,7 @@
 #include "devices/shutdown.h"
 #include "process.h"
 #include "threads/synch.h"
+#include "userprog/filedes.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -280,7 +281,6 @@ int sys_open(const char *file) {
     /* Check for invalid pointer */
     if (!mem_valid(file))
         sys_exit(-1);
-    unsigned int i;
     /* Open file, return -1 on failure */
     lock_acquire(&filesys_lock);
     struct file *opened = filesys_open(file);
@@ -290,27 +290,16 @@ int sys_open(const char *file) {
 
     struct thread *curr = thread_current();
     ASSERT(curr->files.size >= STDOUT_FILENO + 1);
-
-    /* Insert file into first non-null entry of file descriptor
-     * table. Return the index where the file was inserted
-     */
-    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
-        if (curr->files.data[i] == NULL) {
-            curr->files.data[i] = opened;
-            return i;
-        }
-    }
-    /* If all current values are non-null, append */
-    vector_append(&curr->files, opened);
-    return (curr->files.size - 1);
+    return fd_insert_file(opened);
 }
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd) {
     if (!fd_valid(fd))
         sys_exit(-1);
+    struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
-    int ret = file_length(thread_current()->files.data[fd]);
+    int ret = file_length(file);
     lock_release(&filesys_lock);
     return ret;
 }
@@ -320,7 +309,6 @@ int sys_filesize(int fd) {
  */
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
-    struct thread *curr = thread_current();
 
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
             fd == STDOUT_FILENO || !fd_valid(fd))
@@ -333,9 +321,9 @@ int sys_read(int fd, void *buffer, unsigned int size) {
         }
         return size;
     } else {
+        struct file *file = fd_lookup_file(fd);
         lock_acquire(&filesys_lock);
-        int ret = (int) file_read(curr->files.data[fd],
-                buffer, size);
+        int ret = (int) file_read(file, buffer, size);
         lock_release(&filesys_lock);
         return ret;
     }
@@ -353,9 +341,9 @@ int sys_write(int fd, const void *buffer, unsigned int size) {
         putbuf((char *) buffer, size);
         return size;
     } else {
+        struct file *file = fd_lookup_file(fd);
         lock_acquire(&filesys_lock);
-        int ret = (int) file_write(thread_current()->files.data[fd],
-                buffer, size);
+        int ret = (int) file_write(file, buffer, size);
         lock_release(&filesys_lock);
         return ret;
     }
@@ -365,8 +353,9 @@ int sys_write(int fd, const void *buffer, unsigned int size) {
 void sys_seek(int fd, unsigned int position) {
     if (!fd_valid(fd))
         sys_exit(-1);
+    struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
-    file_seek(thread_current()->files.data[fd], position);
+    file_seek(file, position);
     lock_release(&filesys_lock);
 }
 
@@ -376,8 +365,9 @@ void sys_seek(int fd, unsigned int position) {
 unsigned int sys_tell(int fd) {
     if (!fd_valid(fd))
         sys_exit(-1);
+    struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
-    unsigned int ret = file_tell(thread_current()->files.data[fd]);
+    unsigned int ret = file_tell(file);
     lock_release(&filesys_lock);
     return ret;
 }
@@ -385,13 +375,14 @@ unsigned int sys_tell(int fd) {
 /* Closes file descriptor fd. */
 void sys_close(int fd)
 {
-    struct thread *curr = thread_current();
     if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
+
+    struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
-    file_close(curr->files.data[fd]);
+    file_close(file);
     lock_release(&filesys_lock);
-    curr->files.data[fd] = NULL;
+    fd_clear(fd);
 }
 
 bool sys_chdir(const char *dir) {

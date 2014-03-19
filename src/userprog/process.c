@@ -9,6 +9,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/filedes.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -146,8 +147,7 @@ static void start_process(void *file_name_) {
     if_.esp = stack;
 
     // Set up the file descriptor table.
-    vector_init(&curr->files);
-    vector_zeros(&curr->files, STDOUT_FILENO + 1);
+    fd_init();
 
     // Deny writes to the currently executing file. We do this
     // by opening the executing file, calling file_deny_write, and
@@ -155,7 +155,8 @@ static void start_process(void *file_name_) {
     // instance of the file open. It will be closed when the process
     // exits. We pass sys_open argv[0], which exists in user memory.
     int fd = sys_open(mems[0]);
-    file_deny_write(curr->files.data[fd]);
+    struct file *f = fd_lookup_file(fd);
+    file_deny_write(f);
 
     // We don't need mems any more.
     free(mems);
@@ -230,13 +231,7 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
-    unsigned int i;
-    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++)
-    {
-        if (curr->files.data[i] != NULL)
-            sys_close(i);
-    }
-    vector_destruct(&curr->files);
+    fd_destruct();
 }
 
 /*! Sets up the CPU for running user code in the current thread.
