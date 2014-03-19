@@ -22,6 +22,10 @@ int fd_insert_file(struct file *f) {
     return (curr->files.size - 1);
 }
 
+int fd_insert_dir(struct dir *d) {
+    PANIC("stop it. cut it out.");
+}
+
 struct file *fd_lookup_file(int fd) {
     return thread_current()->files.data[fd];
 }

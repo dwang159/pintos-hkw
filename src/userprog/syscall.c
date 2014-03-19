@@ -277,20 +277,26 @@ bool sys_remove(const char *file) {
 /* Opens the file called file. Returns the file descriptor or -1
  * on failure.
  * */
-int sys_open(const char *file) {
+int sys_open(const char *filename) {
     /* Check for invalid pointer */
-    if (!mem_valid(file))
+    if (!mem_valid(filename))
         sys_exit(-1);
     /* Open file, return -1 on failure */
+    struct file *fi = NULL;
+    struct dir *dir = NULL;
     lock_acquire(&filesys_lock);
-    struct file *opened = filesys_open(file);
+    fi = filesys_open(filename);
+    if (fi == NULL) {
+        dir = filesys_open_dir(filename);
+    }
     lock_release(&filesys_lock);
-    if (opened == NULL)
+    if (fi != NULL) {
+        return fd_insert_file(fi);
+    } else if (dir != NULL) {
+        return fd_insert_dir(dir);
+    } else {
         return -1;
-
-    struct thread *curr = thread_current();
-    ASSERT(curr->files.size >= STDOUT_FILENO + 1);
-    return fd_insert_file(opened);
+    }
 }
 
 /* Returns the size of the file open, given the file descriptor. */
