@@ -52,6 +52,7 @@ static inline size_t bytes_to_sectors(off_t size) {
 struct inode {
     struct list_elem elem;       /*!< Element in inode list. */
     struct lock in_lock;
+    bool is_dir;
     block_sector_t sector;       /*!< Sector number of disk location. */
     int open_cnt;                /*!< Number of openers. */
     bool removed;                /*!< True if deleted, false otherwise. */
@@ -352,6 +353,6 @@ void release(struct inode *inode) {
     lock_release(&inode->in_lock);
 }
 
-void is_dir(struct inode *inode) {
+bool is_dir(const struct inode *inode) {
     return inode->is_dir;
 }
