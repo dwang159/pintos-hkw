@@ -29,9 +29,13 @@ struct inode_disk {
      * N_BLOCKS - 1 has 3-indirect addresses (unused).
      */
     block_sector_t i_block[N_BLOCKS];
-
+    // Whether this inode is a directory
+    bool is_dir;
+    // If this inode is a directory, represents the parent directory. 
+    // Invalid for files due to hard linking
+    block_sector_t parent; 
     // Fills up the rest of the space in this block.
-    char unused[BLOCK_SECTOR_SIZE - 3 * 4 - N_BLOCKS * 4];
+    char unused[BLOCK_SECTOR_SIZE - 5 * 4 - N_BLOCKS * 4];
 };
 
 /*! Returns the number of sectors to allocate for an inode SIZE
@@ -114,7 +118,8 @@ void inode_init(void) {
     device.
     Returns true if successful.
     Returns false if memory or disk allocation fails. */
-bool inode_create(block_sector_t sector, off_t length) {
+bool inode_create(block_sector_t sector, off_t length, bool is_dir,
+        block_sector_t parent) {
     struct inode_disk *disk_inode = NULL;
     bool success = false;
 
@@ -129,6 +134,8 @@ bool inode_create(block_sector_t sector, off_t length) {
         size_t sectors = bytes_to_sectors(length);
         disk_inode->length = length;
         disk_inode->magic = INODE_MAGIC;
+        disk_inode->is_dir = is_dir;
+        disk_inode->parent = parent;
         if (free_map_allocate(sectors, &disk_inode->start)) {
             cache_write(sector, disk_inode);
             if (sectors > 0) {

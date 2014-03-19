@@ -21,8 +21,14 @@ struct dir_entry {
 
 /*! Creates a directory with space for ENTRY_CNT entries in the
     given SECTOR.  Returns true if successful, false on failure. */
-bool dir_create(block_sector_t sector, size_t entry_cnt) {
-    return inode_create(sector, entry_cnt * sizeof(struct dir_entry));
+bool dir_create(block_sector_t sector, size_t entry_cnt, block_sector_t par) {
+    if(inode_create(sector, entry_cnt * sizeof(struct dir_entry), 
+            true, par)) {
+        struct dir *d = dir_open(inode_open(sector));
+        if (dir_add(d, ".", sector) && dir_add(d, "..", par))
+            return true;
+        }
+    return false;
 }
 
 /*! Opens and returns the directory for the given INODE, of which
@@ -202,4 +208,42 @@ bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
         } 
     }
     return false;
+}
+
+/* Given a path, opens the parent directory of the specified file and returns
+ * a pointer to it. If an invalid path is given, returns NULL */
+struct dir * dir_open_parent(char * name, block_sector_t cwd) {
+    char *copy;
+    char **buf;
+    bool absolute = (name[0] == '/');
+    struct dir *d, *old;
+
+    strlcpy(name, copy, strlen(name));
+    if (absolute) {
+        d = dir_open_root();
+    } else {
+        d = dir_open(inode_open(cwd));
+    }
+
+    // Tokenize string, then open each directory starting from the root
+    // or the current working directory.
+    struct inode *i;
+    char *tok = strtok_r(copy, "/", buf);
+    while (tok != NULL) {
+        old = d;
+        dir_lookup(d, tok, &i);
+        d = dir_open(i);
+        if (d == NULL) {
+            if (strtok_r(copy, "/", buf) == NULL) {
+                d = old;
+                break;
+            } else {
+                return NULL;
+            }
+        }
+        free(old);
+        inode_close(i);
+        tok = strtok_r(copy, "/", buf);
+    }
+    return d;
 }
