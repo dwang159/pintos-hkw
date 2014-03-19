@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
+#include "filesys/inode.h"
+#include "filesys/filesys.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -127,6 +129,9 @@ struct thread {
 
     // File descriptor table.
     struct vector files;
+
+    // Current directory block sector
+    block_sector_t dir;
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
