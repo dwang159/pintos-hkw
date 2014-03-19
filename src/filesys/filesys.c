@@ -2,6 +2,8 @@
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
+#include "threads/malloc.h" 
+#include "threads/thread.h"
 #include "filesys/cache.h"
 #include "filesys/file.h"
 #include "filesys/free-map.h"
@@ -41,7 +43,11 @@ void filesys_done(void) {
     or if internal memory allocation fails. */
 bool filesys_create(const char *name, off_t initial_size) {
     block_sector_t inode_sector = 0;
-    struct dir *dir = dir_open_root();
+    char *fname = malloc(strlen(name));
+    if (fname == NULL)
+        return false;
+    struct dir *dir = dir_open_name(name, fname);
+
     bool success = (dir != NULL &&
                     free_map_allocate(1, &inode_sector) &&
                     inode_create(inode_sector, initial_size, false, 0) &&
@@ -49,6 +55,7 @@ bool filesys_create(const char *name, off_t initial_size) {
     if (!success && inode_sector != 0) 
         free_map_release(inode_sector, 1);
     dir_close(dir);
+    free(fname);
 
     return success;
 }

@@ -8,8 +8,6 @@
 #include "threads/thread.h"
 #include "filesys/free-map.h"
 
-#define BUFSIZE 4096
-
 /*! A directory. */
 struct dir {
     struct inode *inode;                /*!< Backing store. */
@@ -40,22 +38,15 @@ bool dir_create(block_sector_t sector, size_t entry_cnt, block_sector_t par) {
  * entry_cnt entries */
 bool dir_mkdir(const char *name, size_t entry_cnt) {
     block_sector_t inode_sector = 0;
-    struct dir *d;
-    char copied_name[BUFSIZE];
-    strlcpy(copied_name, name, sizeof(copied_name));
-    // Open the correct starting directory (root or cwd)
-    if (dir_is_path(copied_name)) {
-        d = dir_open_parent(copied_name, thread_current()->dir);
-    } else {
-        d = dir_open(inode_open(thread_current()->dir));
+    char *dname = malloc(strlen(name));
+    if (dname == NULL)
+        return false;
+    struct dir *d = dir_open_name(name, dname);
+    if (d == NULL) {
+        free(dname);
+        return false;
     }
-    // Find the actual name of the directory
-    char *dname = strrchr(copied_name, '/');
-    if (dname != NULL) {
-        dname ++;
-    } else {
-        dname = copied_name;
-    }
+
     // Create the new directory
     bool success = (d != NULL &&
                     free_map_allocate(1, &inode_sector) &&
@@ -65,7 +56,7 @@ bool dir_mkdir(const char *name, size_t entry_cnt) {
     if (!success && inode_sector != 0)
         free_map_release(inode_sector, 1);
     dir_close(d);
-
+    free(dname);
     return success;
 }
 
@@ -251,8 +242,14 @@ bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
 /* Given a path, opens the parent directory of the specified file and returns
  * a pointer to it. If an invalid path is given, returns NULL */
 struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
-    char copied_name[BUFSIZE];
-    char *buf[BUFSIZE];
+    char *copied_name = malloc(strlen(name));
+    if (copied_name == NULL)
+        return NULL;
+
+    char **buf = malloc(strlen(name));
+    if (buf == NULL)
+        return NULL;
+
     bool absolute = (name[0] == '/');
     struct dir *d, *old;
 
@@ -272,17 +269,21 @@ struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
         dir_lookup(d, tok, &i);
         d = dir_open(i);
         if (d == NULL) {
-            if (strtok_r(copied_name, "/", buf) == NULL) {
+            if (strtok_r(NULL, "/", buf) == NULL) {
                 d = old;
                 break;
             } else {
+                free(copied_name);
+                free(buf);
                 return NULL;
             }
         }
-        free(old);
-        inode_close(i);
-        tok = strtok_r(copied_name, "/", buf);
+        dir_close(old);
+        //inode_close(i);
+        tok = strtok_r(NULL, "/", buf);
     }
+    free(buf);
+    free(copied_name);
     return d;
 }
 
@@ -292,28 +293,52 @@ bool dir_is_path(const char *name) {
 }
 
 bool dir_chdir(const char *name) {
-    struct dir *d;
-    char copied_name[BUFSIZE];
-    strlcpy(copied_name, name, sizeof(copied_name));
-    // Open the correct starting directory (root or cwd)
-    if (dir_is_path(copied_name)) {
-        d = dir_open_parent(copied_name, thread_current()->dir);
-    } else {
-        d = dir_open(inode_open(thread_current()->dir));
+    char *dname = malloc(strlen(name));
+    if (dname == NULL)
+        return false;
+    struct dir *d = dir_open_name(name, dname);
+    if (d == NULL) {
+        free (dname);
+        return false;
     }
-    // Find the actual name of the directory
-    char *dname = strrchr(copied_name, '/');
-    if (dname != NULL) {
-        dname ++;
-    } else {
-        dname = copied_name;
-    }
+
     struct inode *i;
     if (!dir_lookup(d, dname, &i))
         return false;
     d = dir_open(i);
-    if (d == NULL)
+    if (d == NULL) {
+        free(dname);
         return false;
+    }
     thread_current()->dir = inode_get_inumber(d->inode);
+    free(dname);
     return true;
+}
+
+/* Given the path name of a directory, opens that directory and separates 
+ * the file name from the path, putting it into fname */
+struct dir *dir_open_name(const char *name, char *fname) {
+    struct dir *dir;
+    char *copied_name = malloc(strlen(name));
+    if (copied_name == NULL)
+        return NULL;
+
+    strlcpy(copied_name, name, sizeof(copied_name));
+    // Open the specified directory. If not given a name requiring
+    // directory traversal, opens the current working directory.
+    if (dir_is_path(copied_name)) {
+        dir = dir_open_parent(copied_name, thread_current()->dir);
+    } else {
+        dir = dir_open(inode_open(thread_current()->dir));
+    }
+    // Find the actual name of the directory
+    char *aname = strrchr(copied_name, '/');
+    if (aname != NULL) {
+        aname ++;
+    } else {
+        aname = copied_name;
+    }
+    strlcpy(fname, aname, strlen(aname) + 1);
+    free(copied_name);
+    return dir;
 }

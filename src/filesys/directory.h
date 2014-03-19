@@ -31,6 +31,7 @@ bool dir_readdir(struct dir *, char name[NAME_MAX + 1]);
 
 struct dir *dir_open_parent(const char *name, block_sector_t cwd);
 bool dir_is_path(const char *name);
+struct dir *dir_open_name(const char *name, char *fname);
 
 #endif /* filesys/directory.h */
 
