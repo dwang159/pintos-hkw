@@ -1,12 +1,14 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "pagedir.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "process.h"
@@ -393,13 +395,15 @@ void sys_close(int fd)
 }
 
 bool sys_chdir(const char *dir) {
-    printf("chdir(%s)\n", dir);
-    PANIC("chdir not implemented\n");
+    if (strlen(dir) == 0)
+        return false;
+    return dir_chdir(dir);
 }
 
 bool sys_mkdir(const char *dir) {
-    printf("mkdir(%s)\n", dir);
-    PANIC("mkdir not implemnted\n");
+    if (strlen(dir) == 0)
+        return false;
+    return dir_mkdir(dir, 16);
 }
 
 bool sys_readdir(int fd, char *name) {

@@ -2,10 +2,16 @@
 #define FILESYS_INODE_H
 
 #include <stdbool.h>
+#include <list.h>
 #include "filesys/off_t.h"
 #include "devices/block.h"
 
 struct bitmap;
+/*! Identifies an inode. */
+#define INODE_MAGIC 0x494e4f44
+
+/* Number of i_blocks. */
+#define N_BLOCKS 15
 
 void inode_init(void);
 bool inode_create(block_sector_t, off_t, bool, block_sector_t);

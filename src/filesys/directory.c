@@ -5,6 +5,8 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+#include "filesys/free-map.h"
 
 /*! A directory. */
 struct dir {
@@ -29,6 +31,38 @@ bool dir_create(block_sector_t sector, size_t entry_cnt, block_sector_t par) {
             return true;
         }
     return false;
+}
+
+/* Makes a directory at the specified path with the specified name, where
+ * this information is encoded in NAME. Allow this new directory to have
+ * entry_cnt entries */
+bool dir_mkdir(const char *name, size_t entry_cnt) {
+    block_sector_t inode_sector = 0;
+    struct dir *d;
+    // Open the correct starting directory (root or cwd)
+    if (dir_is_path(name)) {
+        d = dir_open_parent(name, thread_current()->dir);
+    } else {
+        d = dir_open(inode_open(thread_current()->dir));
+    }
+    // Find the actual name of the directory
+    char *dname = strrchr(name, '/');
+    if (dname != NULL) {
+        dname ++;
+    } else {
+        dname = name;
+    }
+    // Create the new directory
+    bool success = (d != NULL &&
+                    free_map_allocate(1, &inode_sector) &&
+                    dir_create(inode_sector, entry_cnt, 
+                        inode_get_inumber(d->inode)) &&
+                    dir_add(d, dname, inode_sector));
+    if (!success && inode_sector != 0)
+        free_map_release(inode_sector, 1);
+    dir_close(d);
+
+    return success;
 }
 
 /*! Opens and returns the directory for the given INODE, of which
@@ -212,13 +246,13 @@ bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
 
 /* Given a path, opens the parent directory of the specified file and returns
  * a pointer to it. If an invalid path is given, returns NULL */
-struct dir * dir_open_parent(char * name, block_sector_t cwd) {
+struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
     char *copy;
     char **buf;
     bool absolute = (name[0] == '/');
     struct dir *d, *old;
 
-    strlcpy(name, copy, strlen(name));
+    strlcpy((char *) name, copy, strlen(name));
     if (absolute) {
         d = dir_open_root();
     } else {
@@ -249,6 +283,31 @@ struct dir * dir_open_parent(char * name, block_sector_t cwd) {
 }
 
 /* Determines whether a given name is a filename or a path */
-bool dir_is_path(char *name) {
+bool dir_is_path(const char *name) {
     return (strchr(name, '/') != NULL);
+}
+
+bool dir_chdir(const char *name) {
+    struct dir *d;
+    // Open the correct starting directory (root or cwd)
+    if (dir_is_path(name)) {
+        d = dir_open_parent(name, thread_current()->dir);
+    } else {
+        d = dir_open(inode_open(thread_current()->dir));
+    }
+    // Find the actual name of the directory
+    char *dname = strrchr(name, '/');
+    if (dname != NULL) {
+        dname ++;
+    } else {
+        dname = name;
+    }
+    struct inode *i;
+    if (!dir_lookup(d, dname, &i))
+        return false;
+    d = dir_open(i);
+    if (d == NULL)
+        return false;
+    thread_current()->dir = inode_get_inumber(d->inode);
+    return true;
 }
