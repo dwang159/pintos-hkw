@@ -130,6 +130,7 @@ void thread_init(void) {
     initial_thread->tid = allocate_tid();
     initial_thread->nice = 0;
     initial_thread->recent_cpu = 0;
+    initial_thread->dir = ROOT_DIR_SECTOR;
 }
 
 /*! Starts preemptive thread scheduling by enabling interrupts.
@@ -253,6 +254,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     }
 
     tid = t->tid = allocate_tid();
+    t->dir = thread_current()->dir;
 
     // We can't initialize this in thread_init, so we do it here.
     if (!thread_exit_status_initialized) {

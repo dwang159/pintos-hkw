@@ -247,3 +247,8 @@ struct dir * dir_open_parent(char * name, block_sector_t cwd) {
     }
     return d;
 }
+
+/* Determines whether a given name is a filename or a path */
+bool dir_is_path(char *name) {
+    return (strchr(name, '/') != NULL);
+}
