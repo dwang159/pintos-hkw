@@ -1,12 +1,14 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "pagedir.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "process.h"
@@ -233,6 +235,8 @@ pid_t sys_exec(const char *cmd_line) {
     pid_t ret = process_execute(cmd_line);
     intr_set_level(old_level);
     struct exit_state *es = thread_exit_status.data[ret];
+    // Wait until the child process has launched, to measure
+    // whether it was successful or not. 
     sema_down(&es->launching);
     return es->load_successful ? ret : TID_ERROR;
 }
@@ -391,13 +395,15 @@ void sys_close(int fd)
 }
 
 bool sys_chdir(const char *dir) {
-    printf("chdir(%s)\n", dir);
-    PANIC("chdir not implemented\n");
+    if (strlen(dir) == 0)
+        return false;
+    return dir_chdir(dir);
 }
 
 bool sys_mkdir(const char *dir) {
-    printf("mkdir(%s)\n", dir);
-    PANIC("mkdir not implemnted\n");
+    if (strlen(dir) == 0)
+        return false;
+    return dir_mkdir(dir, 16);
 }
 
 bool sys_readdir(int fd, char *name) {
