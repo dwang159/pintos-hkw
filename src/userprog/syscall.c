@@ -233,6 +233,8 @@ pid_t sys_exec(const char *cmd_line) {
     pid_t ret = process_execute(cmd_line);
     intr_set_level(old_level);
     struct exit_state *es = thread_exit_status.data[ret];
+    // Wait until the child process has launched, to measure
+    // whether it was successful or not. 
     sema_down(&es->launching);
     return es->load_successful ? ret : TID_ERROR;
 }
