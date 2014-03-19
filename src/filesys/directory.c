@@ -42,7 +42,7 @@ bool dir_mkdir(const char *name, size_t entry_cnt) {
     block_sector_t inode_sector = 0;
     struct dir *d;
     char copied_name[BUFSIZE];
-    strlcpy(copied_name, name, sizeof(copied_name)); 
+    strlcpy(copied_name, name, sizeof(copied_name));
     // Open the correct starting directory (root or cwd)
     if (dir_is_path(copied_name)) {
         d = dir_open_parent(copied_name, thread_current()->dir);
@@ -294,7 +294,7 @@ bool dir_is_path(const char *name) {
 bool dir_chdir(const char *name) {
     struct dir *d;
     char copied_name[BUFSIZE];
-    strlcpy(copied_name, name, sizeof(copied_name)); 
+    strlcpy(copied_name, name, sizeof(copied_name));
     // Open the correct starting directory (root or cwd)
     if (dir_is_path(copied_name)) {
         d = dir_open_parent(copied_name, thread_current()->dir);

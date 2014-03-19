@@ -12,6 +12,8 @@
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
+static struct inode_disk buf;
+
 /* Number of i_blocks. */
 #define N_BLOCKS 15
 
@@ -188,6 +190,8 @@ struct inode * inode_open(block_sector_t sector) {
     inode->deny_write_cnt = 0;
     inode->removed = false;
     lock_init(&inode->in_lock);
+    cache_read(inode->sector, &buf);
+    inode->is_dir = buf.is_dir;
     cache_read(inode->sector, &inode->data);
     return inode;
 }
