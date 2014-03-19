@@ -88,18 +88,14 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     off_t start;
 
     ASSERT(inode != NULL);
-    printf("byte_to_sector: pos: %d, sector: %d\n", pos, inode->sector);
     // Read in the data.
     struct inode_disk *disk_inode = (struct inode_disk *) malloc(
             sizeof(struct inode_disk));
     ASSERT(disk_inode);
-    printf("byte_to_sector: reading from cache\n");
     cache_read(inode->sector, disk_inode);
     if (pos >= disk_inode->length) {
-        printf("byte_to_sector: length: %d, pos: -1\n", disk_inode->length);
         return -1;
     }
-    printf("byte_to_sector: finished reading from cache\n");
 
     // The virtual block we want (the block offset within the file if
     // the file was linear).
@@ -139,7 +135,6 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
         PANIC("Level 3 indirect addressing not implemented.\n");
     }
     free(disk_inode);
-    printf("byte_to_sector: result: %d\n", result);
     return result;
 }
 
@@ -331,10 +326,8 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         return 0;
     }
 
-    printf("calling inode_write_at() with size %d, offset %d\n", size, offset);
 
     while (size > 0) {
-        printf("size: %d\n", size);
         /* Sector to write, starting byte offset within sector. */
         block_sector_t sector_idx = byte_to_sector(inode, offset);
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
@@ -358,7 +351,6 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         offset += chunk_size;
         bytes_written += chunk_size;
     }
-    printf("finished inode_write_at(), wrote %d bytes\n", bytes_written);
     release(inode);
     return bytes_written;
 }
