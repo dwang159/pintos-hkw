@@ -17,17 +17,27 @@ static struct inode_disk buf;
 /* Number of i_blocks. */
 #define N_BLOCKS 15
 
-static void acquire(struct inode *inode);
-static void release(struct inode *inode);
+/* Number of blocks in a group. We allocate blocks one group at a time
+ * to improve locality of data, while still enabling extensibility.
+ * This should be chosen such that BLOCKS_PER_GROUP * BLOCK_SECTOR_SIZE
+ * is a multiple of a page size.
+ */
+#define BLOCKS_PER_GROUP 8
 
 /*! On-disk inode.
     Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk {
-    block_sector_t start; // TODO: eventually get rid of it
     // File size in bytes.
     off_t length;
     // Magic number used to identify inodes.
     unsigned magic;
+    // Number of blocks currently used by this file.
+    unsigned blocks_used;
+    // Next free block in the group of blocks reserved for this file.
+    // NULL if there are no more free blocks.
+    block_sector_t next_block;
+    // Number of blocks left in the next group reserved for this file.
+    unsigned group_blocks_free;
     /* Block addressing, contains pointers to other blocks.
      * 0..N_BLOCKS - 4 are direct addresses
      * N_BLOCKS - 3 has 1-indirect addresses
@@ -37,12 +47,19 @@ struct inode_disk {
     block_sector_t i_block[N_BLOCKS];
     // Whether this inode is a directory
     bool is_dir;
-    // If this inode is a directory, represents the parent directory. 
+    // If this inode is a directory, represents the parent directory.
     // Invalid for files due to hard linking
-    block_sector_t parent; 
+    block_sector_t parent;
     // Fills up the rest of the space in this block.
-    char unused[BLOCK_SECTOR_SIZE - 5 * 4 - N_BLOCKS * 4];
+    char unused[BLOCK_SECTOR_SIZE - (7 + N_BLOCKS) * 4];
 };
+
+/* Appends a sector to an inode. */
+static bool append_sector(struct inode_disk *disk_inode,
+        block_sector_t *result);
+
+static void acquire(struct inode *inode);
+static void release(struct inode *inode);
 
 /*! Returns the number of sectors to allocate for an inode SIZE
     bytes long. */
@@ -71,10 +88,14 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     off_t start;
 
     ASSERT(inode != NULL);
-    if (pos >= inode->data.length)
+    // Read in the data.
+    struct inode_disk *disk_inode = (struct inode_disk *) malloc(
+            sizeof(struct inode_disk));
+    ASSERT(disk_inode);
+    cache_read(inode->sector, disk_inode);
+    if (pos >= disk_inode->length) {
         return -1;
-    // TODO: old
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+    }
 
     // The virtual block we want (the block offset within the file if
     // the file was linear).
@@ -83,15 +104,16 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     if (vblock <= N_BLOCKS - 4) {
         // If vblock is in the range 0..N_BLOCKS - 4, then we can directly
         // get the block that we want.
-        return inode->data.i_block[vblock];
+        result = disk_inode->i_block[vblock];
     } else if (vblock <= BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
         // If vblock is in the range:
         // NBLOCKS - 3..BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
         // then it is accessed through 1-indirect addressing.
         // This requires one disk access to get the block sector.
-        block_sector_t indirect_1 = inode->data.i_block[N_BLOCKS - 3];
-        start = vblock - (N_BLOCKS - 4);
-        cache_read_spec(indirect_1, &result, start, sizeof(block_sector_t));
+        block_sector_t indirect_1 = disk_inode->i_block[N_BLOCKS - 3];
+        start = vblock - (N_BLOCKS - 3);
+        cache_read_spec(indirect_1, &result, start * sizeof(block_sector_t),
+                sizeof(block_sector_t));
     } else if (vblock <= (BLOCK_SECTOR_SIZE / 4) * (BLOCK_SECTOR_SIZE / 4) +
             BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
         // Otherwise, if vblock is in the range:
@@ -99,17 +121,20 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
         // (BLOCK_SECTOR_SIZE / 4)^2 + BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
         // then it is accessed through 2-indirect addressing. This requires
         // two disk accesses to get the block sector.
-        block_sector_t indirect_2 = inode->data.i_block[N_BLOCKS - 2];
+        block_sector_t indirect_2 = disk_inode->i_block[N_BLOCKS - 2];
         block_sector_t indirect_1;
-        start = (vblock - (N_BLOCKS - 4)) / (BLOCK_SECTOR_SIZE / 4);
-        cache_read_spec(indirect_2, &indirect_1, start,
-                sizeof(block_sector_t));
-
-        start = (vblock - (N_BLOCKS - 4)) % (BLOCK_SECTOR_SIZE / 4);
-        cache_read_spec(indirect_1, &result, start, sizeof(block_sector_t));
+        start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) /
+            (BLOCK_SECTOR_SIZE / 4);
+        cache_read_spec(indirect_2, &indirect_1,
+                start * sizeof(block_sector_t), sizeof(block_sector_t));
+        start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) %
+            (BLOCK_SECTOR_SIZE / 4);
+        cache_read_spec(indirect_1, &result,
+                start * sizeof(block_sector_t), sizeof(block_sector_t));
     } else {
         PANIC("Level 3 indirect addressing not implemented.\n");
     }
+    free(disk_inode);
     return result;
 }
 
@@ -130,7 +155,6 @@ void inode_init(void) {
 bool inode_create(block_sector_t sector, off_t length, bool is_dir,
         block_sector_t parent) {
     struct inode_disk *disk_inode = NULL;
-    bool success = false;
 
     ASSERT(length >= 0);
 
@@ -139,26 +163,32 @@ bool inode_create(block_sector_t sector, off_t length, bool is_dir,
     ASSERT(sizeof *disk_inode == BLOCK_SECTOR_SIZE);
 
     disk_inode = calloc(1, sizeof *disk_inode);
-    if (disk_inode != NULL) {
-        size_t sectors = bytes_to_sectors(length);
-        disk_inode->length = length;
-        disk_inode->magic = INODE_MAGIC;
-        disk_inode->is_dir = is_dir;
-        disk_inode->parent = parent;
-        if (free_map_allocate(sectors, &disk_inode->start)) {
-            cache_write(sector, disk_inode);
-            if (sectors > 0) {
-                static char zeros[BLOCK_SECTOR_SIZE];
-                size_t i;
-
-                for (i = 0; i < sectors; i++)
-                    cache_write(disk_inode->start + i, zeros);
-            }
-            success = true;
-        }
-        free(disk_inode);
+    if (disk_inode == NULL) {
+        return false;
     }
-    return success;
+    size_t sectors = bytes_to_sectors(length);
+    disk_inode->length = length;
+    disk_inode->magic = INODE_MAGIC;
+    disk_inode->blocks_used = 0;
+    disk_inode->next_block = 0;
+    disk_inode->group_blocks_free = 0;
+    disk_inode->is_dir = is_dir;
+    disk_inode->parent = parent;
+    unsigned i;
+    static char zeros[BLOCK_SECTOR_SIZE];
+    block_sector_t block;
+    for (i = 0; i < sectors; i++) {
+        if (append_sector(disk_inode, &block)) {
+            // Fill the new block with zeros.
+            cache_write(block, zeros);
+        } else {
+            return false;
+        }
+    }
+    // Write inode to disk.
+    cache_write(sector, disk_inode);
+    free(disk_inode);
+    return true;
 }
 
 /*! Reads an inode from SECTOR
@@ -179,7 +209,7 @@ struct inode * inode_open(block_sector_t sector) {
     }
 
     /* Allocate memory. */
-    inode = malloc(sizeof *inode);
+    inode = (struct inode *) malloc(sizeof(struct inode));
     if (inode == NULL)
         return NULL;
 
@@ -227,8 +257,8 @@ void inode_close(struct inode *inode) {
         /* Deallocate blocks if removed. */
         if (inode->removed) {
             free_map_release(inode->sector, 1);
-            free_map_release(inode->data.start,
-                             bytes_to_sectors(inode->data.length));
+
+            // TODO
         }
         release(inode);
         free(inode);
@@ -256,7 +286,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size,
     acquire(inode);
     while (size > 0) {
         /* Disk sector to read, starting byte offset within sector. */
-        block_sector_t sector_idx = byte_to_sector (inode, offset);
+        block_sector_t sector_idx = byte_to_sector(inode, offset);
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
         /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -295,6 +325,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         release(inode);
         return 0;
     }
+
 
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
@@ -347,6 +378,92 @@ void inode_allow_write (struct inode *inode) {
 /*! Returns the length, in bytes, of INODE's data. */
 off_t inode_length(const struct inode *inode) {
     return inode->data.length;
+}
+
+/* Appends a sector to an inode. Returns true if successful, else
+ * false. Write the newly allcoated block to result.
+ */
+static bool append_sector(struct inode_disk *disk_inode,
+        block_sector_t *result) {
+    ASSERT(disk_inode);
+    // Check if there are any free blocks in the current group of blocks
+    // allocated for this file.
+    if (disk_inode->group_blocks_free == 0) {
+        // Allocate a new group.
+        if (free_map_allocate(BLOCKS_PER_GROUP, &disk_inode->next_block)) {
+            disk_inode->group_blocks_free = BLOCKS_PER_GROUP;
+        } else {
+            // Allocation failed.
+            return false;
+        }
+    }
+    *result = disk_inode->next_block;
+    disk_inode->next_block++;
+    disk_inode->group_blocks_free--;
+    if (disk_inode->group_blocks_free == 0) {
+        disk_inode->next_block = 0;
+    }
+    // Insert this new block into the index table.
+    disk_inode->blocks_used++;
+    // Block offset within file.
+    unsigned b = disk_inode->blocks_used - 1;
+    if (b <= N_BLOCKS - 4) {
+        // Direct addressing.
+        disk_inode->i_block[b] = *result;
+    } else if (b <= BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
+        // 1-indirect addressing.
+        block_sector_t indirect_block;
+        // Index of our pointer within the indirect block.
+        off_t index1 = b - (N_BLOCKS - 3);
+        if (index1 == 0) {
+            // We need to make a block for the indirect block.
+            if (!free_map_allocate(1, &indirect_block)) {
+                return false;
+            }
+            disk_inode->i_block[N_BLOCKS - 3] = indirect_block;
+        } else {
+            indirect_block = disk_inode->i_block[N_BLOCKS - 3];
+        }
+        // Write the location of the newly allocated block to the
+        // indirect block.
+        cache_write_spec(indirect_block, result,
+                index1 * sizeof(block_sector_t), sizeof(block_sector_t));
+    } else if (b <= (BLOCK_SECTOR_SIZE / 4) * (BLOCK_SECTOR_SIZE / 4) +
+            BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
+        // 2-indirect addressing.
+        block_sector_t indirect2; // Contains pointers to indirect1 blocks.
+        block_sector_t indirect1; // Contains pointers to data blocks.
+        // Index of our desired pointers within the indirect2 and indirect1
+        // blocks, respectively.
+        off_t index2 = (b - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) /
+            (BLOCK_SECTOR_SIZE / 4);
+        off_t index1 = (b - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) %
+            (BLOCK_SECTOR_SIZE / 4);
+        if (index1 == 0 && index2 == 0) {
+            // We need to create the indirect2 block.
+            if (!free_map_allocate(1, &indirect2)) {
+                return false;
+            }
+            disk_inode->i_block[N_BLOCKS - 2] = indirect2;
+        } else {
+            indirect2 = disk_inode->i_block[N_BLOCKS - 2];
+        }
+        if (index1 == 0) {
+            // We need to create a new indirect1 block.
+            if (!free_map_allocate(1, &indirect1)) {
+                return false;
+            }
+            cache_write_spec(indirect2, &indirect1,
+                    index2 * sizeof(block_sector_t), sizeof(block_sector_t));
+        }
+        // Write the location of the newly allocated block to the
+        // indirect block.
+        cache_write_spec(indirect1, result,
+                index1 * sizeof(block_sector_t), sizeof(block_sector_t));
+    } else {
+        PANIC("3-Indirect accessing not implemented!\n");
+    }
+    return true;
 }
 
 void acquire(struct inode *inode) {
