@@ -55,7 +55,8 @@ bool dir_mkdir(const char *name, size_t entry_cnt) {
     // Create the new directory
     bool success = (d != NULL &&
                     free_map_allocate(1, &inode_sector) &&
-                    dir_create(inode_sector, entry_cnt, d->inode->sector) &&
+                    dir_create(inode_sector, entry_cnt, 
+                        inode_get_inumber(d->inode)) &&
                     dir_add(d, dname, inode_sector));
     if (!success && inode_sector != 0)
         free_map_release(inode_sector, 1);
@@ -307,6 +308,6 @@ bool dir_chdir(const char *name) {
     d = dir_open(i);
     if (d == NULL)
         return false;
-    thread_current()->dir = d->inode->sector;
+    thread_current()->dir = inode_get_inumber(d->inode);
     return true;
 }
