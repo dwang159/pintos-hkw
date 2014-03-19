@@ -351,3 +351,7 @@ void acquire(struct inode *inode) {
 void release(struct inode *inode) {
     lock_release(&inode->in_lock);
 }
+
+void is_dir(struct inode *inode) {
+    return inode->is_dir;
+}
