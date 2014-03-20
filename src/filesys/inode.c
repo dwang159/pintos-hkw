@@ -326,8 +326,8 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         release(inode);
         return 0;
     }
-
-
+    extend_to(inode, offset + size); 
+    
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
         block_sector_t sector_idx = byte_to_sector(inode, offset);
@@ -358,7 +358,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 
 void extend_to(struct inode *inode, off_t offset) {
     /* Extends the inode until the offset is valid. */
-    while (offset < inode_length(inode)) {
+    while (offset > inode_length(inode)) {
         PANIC("Not implemented.");
     }
 }
@@ -483,8 +483,4 @@ void release(struct inode *inode) {
 
 bool inode_is_dir(const struct inode *inode) {
     return inode->is_dir;
-}
-
-bool is_removed(const struct inode *inode) {
-    return inode->removed;
 }
