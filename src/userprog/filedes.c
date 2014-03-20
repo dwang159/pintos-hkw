@@ -11,6 +11,7 @@ struct fileordir {
         struct file *f;
         struct dir *d;
     };
+    int count;
 };
 
 static int insert(void *, bool);
@@ -39,6 +40,7 @@ int insert(void *payload, bool is_dir) {
     } else {
         fod->f = payload;
     }
+    fod->count = 2;
     for (i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
         if (curr->files.data[i] == NULL) {
             curr->files.data[i] = fod;
@@ -105,4 +107,9 @@ bool fd_valid(int fd) {
             return false;
         }
     return true;
+}
+
+int fd_count_dir(int fd) {
+    struct fileordir *fod = thread_current()->files.data[fd];
+    return fod->count++;
 }

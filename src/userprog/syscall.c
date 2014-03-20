@@ -14,6 +14,7 @@
 #include "process.h"
 #include "threads/synch.h"
 #include "userprog/filedes.h"
+#include "lib/user/syscall.h"
 
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
@@ -283,7 +284,8 @@ int sys_open(const char *filename) {
         int out = fd_insert_file(fi);
         return out;
     } else if (dir != NULL) {
-        return fd_insert_dir(dir);
+        int out = fd_insert_dir(dir);
+        return out;
     } else {
         return -1;
     }
@@ -399,8 +401,12 @@ bool sys_mkdir(const char *dir) {
 }
 
 bool sys_readdir(int fd, char *name) {
-    printf("readdir(%d, %s)\n", fd, name);
-    PANIC("readdir not implemnted\n");
+    if (!fd_valid(fd) && !sys_isdir(fd)) {
+        sys_exit(-1);
+    }
+    struct dir *dir = fd_lookup_dir(fd);
+    int i = fd_count_dir(fd);
+    return dir_entry_name(dir, i, name);
 }
 
 bool sys_isdir(int fd) {
