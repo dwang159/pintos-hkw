@@ -400,7 +400,7 @@ bool sys_mkdir(const char *dir) {
 
 bool sys_readdir(int fd, char *name) {
     printf("readdir(%d, %s)\n", fd, name);
-    PANIC("mkdir not implemnted\n");
+    PANIC("readdir not implemnted\n");
 }
 
 bool sys_isdir(int fd) {

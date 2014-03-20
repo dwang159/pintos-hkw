@@ -87,19 +87,8 @@ update_thread();
 }
 
 struct dir *filesys_open_dir(const char *name) {
-    struct dir *dir = dir_open_root();
-    struct inode *inode = NULL;
-
-    if (dir != NULL)
-        dir_lookup(dir, name, &inode);
-update_thread();
-    dir_close(dir);
-
-    if(inode_is_dir(inode)) {
-        return dir_open(inode);
-    } else {
-        return false;
-    }
+    char buf[16];
+    return dir_open_name(name, buf);
 }
 
 /*! Deletes the file named NAME.  Returns true if successful, false on
