@@ -87,8 +87,25 @@ update_thread();
 }
 
 struct dir *filesys_open_dir(const char *name) {
-    char buf[16];
-    return dir_open_name(name, buf);
+    // Special case, because of the empty fname.
+    if (!strcmp("/", name)) {
+        return dir_open_root();
+    }
+    char *fname = malloc(strlen(name));
+    if (fname == NULL)
+        return false;
+    struct dir *dir = dir_open_name(name, fname);
+    struct inode *inode = NULL;
+    if (dir != NULL)
+        dir_lookup(dir, fname, &inode);
+    dir_close(dir);
+    free(fname);
+
+    if (inode_is_dir(inode)) {
+        return dir_open(inode);
+    } else {
+        return NULL;
+    }
 }
 
 /*! Deletes the file named NAME.  Returns true if successful, false on
