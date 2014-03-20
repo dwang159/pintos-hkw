@@ -327,7 +327,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         return 0;
     }
     if (offset + size > inode->length) {
-        //extend_to(inode, offset + size);
+        extend_to(inode, offset + size);
     }
     
     while (size > 0) {

@@ -85,8 +85,6 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
 
-
-
 			    SUBDIRECTORIES
 			    ==============
 
@@ -96,10 +94,40 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct inode_disk {
+    ...
+    // Whether this inode is a directory
+    bool is_dir;
+
+    // If this inode is a directory, represents the parent directory.
+    // Invalid for files due to hard linking
+    block_sector_t parent;
+}
+
+struct inode {
+    // whether this inode is a directory
+    bool is_dir;
+}
+
 ---- ALGORITHMS ----
 
 >> B2: Describe your code for traversing a user-specified path.  How
 >> do traversals of absolute and relative paths differ?
+We begin by determining whether we have been given an absolute or relative
+path. This is done by checking whether the given path name starts with the
+character '/'. If it does, we open the root directory. Otherwise, we open
+the current working directory. We then tokenize the path, separating on
+'/' characters. We use dir_lookup on the current open directory to determine
+which directory to open next. If this is NULL, the path does not exist, and
+we free our resources and return NULL. Otherwise, we open the directory
+that we just looked up and close the old one. If we find that we have
+reached the second to last token, we set our current directory back to our
+old directory before proceeding, ensuring that we have opened the second-to-
+last, rather than last, directory.
+Here, the only difference between absolute and relative paths is the starting
+point for our current open directory. We deal with "." and ".." by entering
+them as entries upon creation of each directory. They can then be treated
+like any other directory when looking up a path.
 
 ---- SYNCHRONIZATION ----
 
@@ -117,6 +145,13 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
+We represent the current directory of a process with its sector number.
+We do so because the sector number allows us to obtain inode or dir structs
+relatively easily, and doesn't depend on having inodes open. This also
+circumvents the fact that inodes and the filesystem are initialized after
+threads. The simplicity of keeping around a sector number rather than a
+struct is very convenient, and makes it so that we don't carry around a
+dynamically allocated resource for the entire thread's lifetime.
 
 			     BUFFER CACHE
 			     ============
