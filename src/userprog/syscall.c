@@ -265,12 +265,13 @@ bool sys_remove(const char *file) {
         char name[16];
         bool out = sys_readdir(fd, name);
         sys_close(fd);
-        // Cannot delete a nonempty directior.
+        // Cannot delete a nonempty directory.
         if (out) {
             return false;
         }
+    } else {
+        sys_close(fd);
     }
-    sys_close(fd);
 
     lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
@@ -419,8 +420,11 @@ bool sys_mkdir(const char *dir) {
 }
 
 bool sys_readdir(int fd, char *name) {
-    if (!fd_valid(fd) && !sys_isdir(fd)) {
+    if (!fd_valid(fd)) {
         sys_exit(-1);
+    }
+    if (!sys_isdir(fd)) {
+        return false;
     }
     struct dir *dir = fd_lookup_dir(fd);
     int i = fd_count_dir(fd);

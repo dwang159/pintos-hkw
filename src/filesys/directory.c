@@ -135,7 +135,7 @@ bool dir_entry_name(const struct dir *dir, size_t i, char *name) {
     size_t ofs = i * sizeof(struct dir_entry);
     struct dir_entry e;
     if (inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e)) {
-        if (strlen(e.name) != 0) {
+        if (e.in_use) {
             strlcpy(name, e.name, READDIR_MAX_LEN);
             return true;
         }
