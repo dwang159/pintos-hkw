@@ -248,7 +248,7 @@ bool sys_create(const char *file, unsigned int initial_size) {
         sys_exit(-1);
     }
     if (in_deleted_dir()) {
-        return -1;
+        return false;
     }
     lock_acquire(&filesys_lock);
     bool ret = filesys_create(file, initial_size);
