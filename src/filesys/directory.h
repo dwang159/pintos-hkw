@@ -23,6 +23,7 @@ struct inode *dir_get_inode(struct dir *);
 bool dir_mkdir(const char *name, size_t entry_cnt);
 bool dir_chdir(const char *name);
 
+bool in_deleted_dir(void);
 /* Reading and writing. */
 bool dir_lookup(const struct dir *, const char *name, struct inode **);
 bool dir_add(struct dir *, const char *name, block_sector_t);

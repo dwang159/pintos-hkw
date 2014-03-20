@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "filesys/free-map.h"
+#include "filesys/inode.h"
 #include "lib/user/syscall.h"
 
 /*! A directory. */
@@ -134,18 +135,19 @@ bool dir_entry_name(const struct dir *dir, size_t i, char *name) {
     size_t ofs = i * sizeof(struct dir_entry);
     struct dir_entry e;
     if (inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e)) {
-        strlcpy(name, e.name, READDIR_MAX_LEN);
-        return true;
-    } else {
-        return false;
+        if (strlen(e.name) != 0) {
+            strlcpy(name, e.name, READDIR_MAX_LEN);
+            return true;
+        }
     }
+    return false;
 }
 
 /*! Searches DIR for a file with the given NAME and returns true if one
     exists, false otherwise.  On success, sets *INODE to an inode for the
     file, otherwise to a null pointer.  The caller must close *INODE. */
 bool dir_lookup(const struct dir *dir, const char *name,
-        struct inode **inode) {
+        struct inode **inode_p) {
     struct dir_entry e;
 
     //TODO figure out deletion here
@@ -158,14 +160,17 @@ bool dir_lookup(const struct dir *dir, const char *name,
 
     if (lookup(dir, name, &e, NULL)) {
         update_thread();
-        *inode = inode_open(e.inode_sector);
+        *inode_p = inode_open(e.inode_sector);
+        if (inode_is_removed(*inode_p)) {
+            *inode_p = NULL;
+        }
         update_thread();
     }
     else
-        *inode = NULL;
+        *inode_p = NULL;
 
 update_thread();
-    return *inode != NULL;
+    return *inode_p != NULL;
 }
 
 /*! Adds a file named NAME to DIR, which must not already contain a file by
@@ -317,7 +322,6 @@ update_thread();
     }
     free(buf);
     free(copied_name);
-    ///printf("name:%s, dir:%d\n", name, inode_get_inumber(d->inode));
     return d;
 }
 
@@ -346,9 +350,14 @@ bool dir_chdir(const char *name) {
         free(dname);
         return false;
     }
-    thread_current()->dir = inode_get_inumber(d->inode);
+    thread_current()->dir = d->inode;
     free(dname);
     return true;
+}
+
+bool in_deleted_dir(void) {
+    struct inode *cwd_inode = thread_current()->dir;
+    return inode_is_removed(cwd_inode);
 }
 
 /* Given the path name of a directory, opens that directory and separates 
@@ -362,10 +371,11 @@ struct dir *dir_open_name(const char *name, char *fname) {
     strlcpy(copied_name, name, strlen(name) + 1);
     // Open the specified directory. If not given a name requiring
     // directory traversal, opens the current working directory.
+    block_sector_t cwd = inode_get_inumber(thread_current()->dir);
     if (dir_is_path(copied_name)) {
-        dir = dir_open_parent(copied_name, thread_current()->dir);
+        dir = dir_open_parent(copied_name, cwd);
     } else {
-        dir = dir_open(inode_open(thread_current()->dir));
+        dir = dir_open(inode_open(cwd));
     }
     // Find the actual name of the directory
     char *aname = strrchr(copied_name, '/');

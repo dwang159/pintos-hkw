@@ -247,6 +247,9 @@ bool sys_create(const char *file, unsigned int initial_size) {
     if (!mem_valid(file)) {
         sys_exit(-1);
     }
+    if (in_deleted_dir()) {
+        return -1;
+    }
     lock_acquire(&filesys_lock);
     bool ret = filesys_create(file, initial_size);
     lock_release(&filesys_lock);
@@ -271,17 +274,21 @@ int sys_open(const char *filename) {
     /* Check for invalid pointer */
     if (!mem_valid(filename))
         sys_exit(-1);
+    if (in_deleted_dir()) {
+        return -1;
+    }
     /* Open file, return -1 on failure */
-    struct file *fi = NULL;
+
+    struct file *file = NULL;
     struct dir *dir = NULL;
     lock_acquire(&filesys_lock);
-    fi = filesys_open(filename);
-    if (fi == NULL) {
+    file = filesys_open(filename);
+    if (file == NULL) {
         dir = filesys_open_dir(filename);
     }
     lock_release(&filesys_lock);
-    if (fi != NULL) {
-        int out = fd_insert_file(fi);
+    if (file != NULL) {
+        int out = fd_insert_file(file);
         return out;
     } else if (dir != NULL) {
         int out = fd_insert_dir(dir);

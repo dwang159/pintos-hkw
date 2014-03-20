@@ -135,7 +135,7 @@ struct thread {
     struct vector files;
 
     // Current directory block sector
-    block_sector_t dir;
+    struct inode *dir;
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
