@@ -256,6 +256,7 @@ bool sys_create(const char *file, unsigned int initial_size) {
 bool sys_remove(const char *file) {
     if (!mem_valid(file))
         sys_exit(-1);
+
     lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
     lock_release(&filesys_lock);

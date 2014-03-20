@@ -8,6 +8,7 @@
 #include "filesys/cache.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -94,16 +95,21 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
             sizeof(struct inode_disk));
     ASSERT(disk_inode);
     cache_read(inode->sector, disk_inode);
+    update_thread();
     if (pos >= disk_inode->length) {
+    update_thread();
         return -1;
     }
+    update_thread();
 
     // The virtual block we want (the block offset within the file if
     // the file was linear).
     unsigned vblock = pos / BLOCK_SECTOR_SIZE;
+    update_thread();
     // Find the actual block sector that corresponds to pos.
     if (vblock <= N_BLOCKS - 4) {
         // If vblock is in the range 0..N_BLOCKS - 4, then we can directly
+    update_thread();
         // get the block that we want.
         result = disk_inode->i_block[vblock];
     } else if (vblock <= BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
@@ -112,26 +118,33 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
         // then it is accessed through 1-indirect addressing.
         // This requires one disk access to get the block sector.
         block_sector_t indirect_1 = disk_inode->i_block[N_BLOCKS - 3];
+    update_thread();
         start = vblock - (N_BLOCKS - 3);
         cache_read_spec(indirect_1, &result, start * sizeof(block_sector_t),
                 sizeof(block_sector_t));
+    update_thread();
+    update_thread();
     } else if (vblock <= (BLOCK_SECTOR_SIZE / 4) * (BLOCK_SECTOR_SIZE / 4) +
             BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 4)) {
         // Otherwise, if vblock is in the range:
         // BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4 through
         // (BLOCK_SECTOR_SIZE / 4)^2 + BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
+    update_thread();
         // then it is accessed through 2-indirect addressing. This requires
         // two disk accesses to get the block sector.
+    update_thread();
         block_sector_t indirect_2 = disk_inode->i_block[N_BLOCKS - 2];
         block_sector_t indirect_1;
         start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) /
             (BLOCK_SECTOR_SIZE / 4);
         cache_read_spec(indirect_2, &indirect_1,
                 start * sizeof(block_sector_t), sizeof(block_sector_t));
+    update_thread();
         start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) %
             (BLOCK_SECTOR_SIZE / 4);
         cache_read_spec(indirect_1, &result,
                 start * sizeof(block_sector_t), sizeof(block_sector_t));
+    update_thread();
     } else {
         PANIC("Level 3 indirect addressing not implemented.\n");
     }
@@ -222,6 +235,7 @@ struct inode * inode_open(block_sector_t sector) {
     inode->removed = false;
     lock_init(&inode->in_lock);
     cache_read(inode->sector, &buf);
+    update_thread();
     inode->is_dir = buf.is_dir;
     inode->length = buf.length;
     return inode;
@@ -288,27 +302,38 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size,
     while (size > 0) {
         /* Disk sector to read, starting byte offset within sector. */
         block_sector_t sector_idx = byte_to_sector(inode, offset);
+    update_thread();
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
+    update_thread();
         /* Bytes left in inode, bytes left in sector, lesser of the two. */
         off_t inode_left = inode_length(inode) - offset;
         int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
+    update_thread();
         int min_left = inode_left < sector_left ? inode_left : sector_left;
 
+    update_thread();
         /* Number of bytes to actually copy out of this sector. */
         int chunk_size = size < min_left ? size : min_left;
+    update_thread();
         if (chunk_size <= 0)
             break;
+    update_thread();
 
+    update_thread();
         cache_read_spec(sector_idx, buffer + bytes_read, sector_ofs,
                 chunk_size);
+    update_thread();
+    update_thread();
 
         /* Advance. */
         size -= chunk_size;
         offset += chunk_size;
         bytes_read += chunk_size;
     }
+    update_thread();
     release(inode);
+    update_thread();
     return bytes_read;
 }
 
@@ -331,6 +356,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
         block_sector_t sector_idx = byte_to_sector(inode, offset);
+    update_thread();
         int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
         /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -482,5 +508,5 @@ void release(struct inode *inode) {
 }
 
 bool inode_is_dir(const struct inode *inode) {
-    return inode->is_dir;
+    return inode && inode->is_dir;
 }

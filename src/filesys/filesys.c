@@ -69,15 +69,19 @@ struct file * filesys_open(const char *name) {
         return false;
     struct dir *dir = dir_open_name(name, fname);
     struct inode *inode = NULL;
-
     if (dir != NULL)
         dir_lookup(dir, fname, &inode);
+update_thread();
     dir_close(dir);
     free(fname);
 
+update_thread();
+
     if(inode_is_dir(inode)) {
+update_thread();
         return false;
     } else {
+update_thread();
         return file_open(inode);
     }
 }
@@ -88,6 +92,7 @@ struct dir *filesys_open_dir(const char *name) {
 
     if (dir != NULL)
         dir_lookup(dir, name, &inode);
+update_thread();
     dir_close(dir);
 
     if(inode_is_dir(inode)) {
@@ -102,8 +107,7 @@ struct dir *filesys_open_dir(const char *name) {
  *  memory allocation fails. */
 bool filesys_remove(const char *name) {
     char *fname = malloc(strlen(name));
-    if (fname == NULL)
-        return false;
+    ASSERT(fname);
     struct dir *dir = dir_open_name(name, fname);
     bool success = dir != NULL && dir_remove(dir, fname);
     dir_close(dir);

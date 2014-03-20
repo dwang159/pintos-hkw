@@ -113,20 +113,34 @@ static bool lookup(const struct dir *dir, const char *name,
 
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
+update_thread();
 
     ///printf("new lookup\n");
-    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
-         ofs += sizeof(e)) {
+update_thread();
+    unsigned i = inode_read_at(dir->inode, &e, sizeof(e), ofs);
+    update_thread();
+    for(ofs = 0; i == sizeof(e); ofs += sizeof(e)) {
+        i = inode_read_at(dir->inode, &e, sizeof(e), ofs);
+        update_thread();
         ///if(e.in_use)
             ///printf("dir %d: %s\n", inode_get_inumber(dir->inode), e.name);
         if (e.in_use && !strcmp(name, e.name)) {
-            if (ep != NULL)
+update_thread();
+            if (ep != NULL) {
+update_thread();
                 *ep = e;
-            if (ofsp != NULL)
+update_thread();
+            }
+            if (ofsp != NULL) {
+update_thread();
                 *ofsp = ofs;
+            }
+update_thread();
             return true;
         }
+        update_thread();
     }
+    update_thread();
     return false;
 }
 
@@ -145,11 +159,15 @@ bool dir_lookup(const struct dir *dir, const char *name,
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    if (lookup(dir, name, &e, NULL))
+    if (lookup(dir, name, &e, NULL)) {
+        update_thread();
         *inode = inode_open(e.inode_sector);
+        update_thread();
+    }
     else
         *inode = NULL;
 
+update_thread();
     return *inode != NULL;
 }
 
@@ -171,21 +189,26 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
         return false;
 
     /* Check that NAME is not in use. */
-    if (lookup(dir, name, NULL, NULL))
+    if (lookup(dir, name, NULL, NULL)) {
+    update_thread();
         goto done;
+    }
 
     /* Set OFS to offset of free slot.
-       If there are no free slots, then it will be set to the
-       current end-of-file.
-     
-       inode_read_at() will only return a short read at end of file.
-       Otherwise, we'd need to verify that we didn't get a short
-       read due to something intermittent such as low memory. */
+     * If there are no free slots, then it will be set to the
+     * current end-of-file.
+     *
+     * inode_read_at() will only return a short read at end of file.
+     * Otherwise, we'd need to verify that we didn't get a short
+     * read due to something intermittent such as low memory. */
+update_thread();
     for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
             ofs += sizeof(e)) {
+        update_thread();
         if (!e.in_use)
             break;
     }
+update_thread();
 
     /* Write slot. */
     e.in_use = true;
@@ -209,9 +232,12 @@ bool dir_remove(struct dir *dir, const char *name) {
     ASSERT(name != NULL);
 
     /* Find directory entry. */
-    if (!lookup(dir, name, &e, &ofs))
+    if (!lookup(dir, name, &e, &ofs)) {
+        update_thread();
         goto done;
+    }
 
+update_thread();
     /* Open inode. */
     inode = inode_open(e.inode_sector);
     if (inode == NULL)
@@ -237,13 +263,16 @@ done:
 bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
     struct dir_entry e;
 
+update_thread();
     while(inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
+        update_thread();
         dir->pos += sizeof(e);
         if (e.in_use) {
             strlcpy(name, e.name, NAME_MAX + 1);
             return true;
         } 
     }
+update_thread();
     return false;
 }
 
@@ -275,6 +304,7 @@ struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
     while (tok != NULL) {
         old = d;
         dir_lookup(d, tok, &i);
+update_thread();
         d = dir_open(i);
         tok = strtok_r(NULL, "/", buf);
         if (tok == NULL) {
@@ -310,8 +340,10 @@ bool dir_chdir(const char *name) {
     }
 
     struct inode *i;
-    if (!dir_lookup(d, dname, &i))
+    if (!dir_lookup(d, dname, &i)) {
+        update_thread();
         return false;
+    }
     d = dir_open(i);
     if (d == NULL) {
         free(dname);
@@ -325,7 +357,6 @@ bool dir_chdir(const char *name) {
 /* Given the path name of a directory, opens that directory and separates 
  * the file name from the path, putting it into fname */
 struct dir *dir_open_name(const char *name, char *fname) {
-    ///printf("open_name: %s\n", name);
     struct dir *dir;
     char *copied_name = malloc(strlen(name));
     if (copied_name == NULL)
@@ -348,6 +379,5 @@ struct dir *dir_open_name(const char *name, char *fname) {
     }
     strlcpy(fname, aname, strlen(aname) + 1);
     free(copied_name);
-    ///printf("open_name: %d\n", inode_get_inumber(dir->inode));
     return dir;
 }
