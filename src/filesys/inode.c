@@ -326,7 +326,9 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         release(inode);
         return 0;
     }
-    extend_to(inode, offset + size); 
+    if (offset + size > inode->length) {
+        //extend_to(inode, offset + size);
+    }
     
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
@@ -357,10 +359,19 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 }
 
 void extend_to(struct inode *inode, off_t offset) {
-    /* Extends the inode until the offset is valid. */
-    while (offset > inode_length(inode)) {
-        PANIC("Not implemented.");
+    struct inode_disk *disk_inode = malloc(sizeof(struct inode_disk));
+    cache_read(inode->sector, disk_inode);
+    int num_blocks = offset / BLOCK_SECTOR_SIZE - disk_inode->blocks_used;
+
+    while (num_blocks > 0) {
+        block_sector_t block;
+        append_sector(disk_inode, &block);
+        num_blocks--;
     }
+    disk_inode->length = offset;
+    inode->length = offset;
+    cache_write(inode->sector, disk_inode);
+    free (disk_inode);
 }
 /*! Disables writes to INODE.
     May be called at most once per inode opener. */
@@ -404,6 +415,7 @@ static bool append_sector(struct inode_disk *disk_inode,
             return false;
         }
     }
+    //TODO Wat?
     *result = disk_inode->next_block;
     disk_inode->next_block++;
     disk_inode->group_blocks_free--;
