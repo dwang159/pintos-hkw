@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "filesys/free-map.h"
+#include "lib/user/syscall.h"
 
 /*! A directory. */
 struct dir {
@@ -113,35 +114,31 @@ static bool lookup(const struct dir *dir, const char *name,
 
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
-update_thread();
 
-    ///printf("new lookup\n");
-update_thread();
-    unsigned i = inode_read_at(dir->inode, &e, sizeof(e), ofs);
-    update_thread();
-    for(ofs = 0; i == sizeof(e); ofs += sizeof(e)) {
-        i = inode_read_at(dir->inode, &e, sizeof(e), ofs);
-        update_thread();
-        ///if(e.in_use)
-            ///printf("dir %d: %s\n", inode_get_inumber(dir->inode), e.name);
+    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
+             ofs += sizeof(e)) {
         if (e.in_use && !strcmp(name, e.name)) {
-update_thread();
             if (ep != NULL) {
-update_thread();
                 *ep = e;
-update_thread();
             }
             if (ofsp != NULL) {
-update_thread();
                 *ofsp = ofs;
             }
-update_thread();
             return true;
         }
-        update_thread();
     }
-    update_thread();
     return false;
+}
+
+bool dir_entry_name(const struct dir *dir, size_t i, char *name) {
+    size_t ofs = i * sizeof(struct dir_entry);
+    struct dir_entry e;
+    if (inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e)) {
+        strlcpy(name, e.name, READDIR_MAX_LEN);
+        return true;
+    } else {
+        return false;
+    }
 }
 
 /*! Searches DIR for a file with the given NAME and returns true if one
