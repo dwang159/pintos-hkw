@@ -28,6 +28,8 @@ Daniel Wang <dwang@caltech.edu>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
 
+http://en.wikipedia.org/wiki/Ext2
+
 		     INDEXED AND EXTENSIBLE FILES
 		     ============================
 
@@ -39,6 +41,22 @@ Daniel Wang <dwang@caltech.edu>
 
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
+
+Let b = BLOCK_SECTOR_SIZE = 512 for convenience.
+
+Direct:
+We have 12 direct blocks = 12 * 512 = 6144 bytes
+
+Indirect:
+We have b / 4 indirect blocks = 128 * 512 = 65536 bytes
+
+Doubly indirect addressing:
+We have (b / 4)^2 doubly indirect blocks = 128^2 * 512 = 8,388,608 bytes
+
+Triply indirect addressing:
+Not implemented.
+
+So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 
 ---- SYNCHRONIZATION ----
 
@@ -66,6 +84,8 @@ Daniel Wang <dwang@caltech.edu>
 >> indirect blocks?  If not, why did you choose an alternative inode
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
+
+
 
 			    SUBDIRECTORIES
 			    ==============
