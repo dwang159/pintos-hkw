@@ -9,9 +9,11 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "lib/user/syscall.h"
+#include "threads/synch.h"
 
 /*! A directory. */
 struct dir {
+    struct lock dlock;                  // Lock for creation/deletion of files
     struct inode *inode;                /*!< Backing store. */
     off_t pos;                          /*!< Current position. */
 };
@@ -29,9 +31,10 @@ bool dir_create(block_sector_t sector, size_t entry_cnt, block_sector_t par) {
     if(inode_create(sector, entry_cnt * sizeof(struct dir_entry), 
             true, par)) {
         struct dir *d = dir_open(inode_open(sector));
-        if (dir_add(d, ".", sector) && dir_add(d, "..", par))
+        if (dir_add(d, ".", sector) && dir_add(d, "..", par)) {
             return true;
         }
+    }
     return false;
 }
 
@@ -69,6 +72,7 @@ struct dir * dir_open(struct inode *inode) {
     if (inode != NULL && dir != NULL) {
         dir->inode = inode;
         dir->pos = 0;
+        lock_init(&dir->dlock);
         return dir;
     }
     else {
@@ -150,11 +154,6 @@ bool dir_lookup(const struct dir *dir, const char *name,
         struct inode **inode_p) {
     struct dir_entry e;
 
-    //TODO figure out deletion here
-    /*if (is_removed(dir->inode)) {
-        *inode = NULL;
-        return false;
-    }*/
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
@@ -190,6 +189,7 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     if (*name == '\0' || strlen(name) > NAME_MAX)
         return false;
 
+    lock_acquire(&(dir->dlock));
     /* Check that NAME is not in use. */
     if (lookup(dir, name, NULL, NULL)) {
     update_thread();
@@ -219,6 +219,7 @@ update_thread();
     success = inode_write_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
 
 done:
+    lock_release((&dir->dlock));
     return success;
 }
 
@@ -233,6 +234,7 @@ bool dir_remove(struct dir *dir, const char *name) {
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
+    lock_acquire(&dir->dlock);
     /* Find directory entry. */
     if (!lookup(dir, name, &e, &ofs)) {
         update_thread();
@@ -256,6 +258,7 @@ update_thread();
 
 done:
     inode_close(inode);
+    lock_release(&dir->dlock);
     return success;
 }
 

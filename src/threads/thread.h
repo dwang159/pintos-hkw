@@ -134,7 +134,7 @@ struct thread {
     // File descriptor table.
     struct vector files;
 
-    // Current directory block sector
+    // Current directory inode
     struct inode *dir;
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */

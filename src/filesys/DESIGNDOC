@@ -94,6 +94,13 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct dir {
+    struct lock dlock; // Lock for creation/deletion of files in directories
+
+struct thread {
+    // Current directory inode
+    struct inode *dir;
+
 struct inode_disk {
     ...
     // Whether this inode is a directory
@@ -135,23 +142,35 @@ like any other directory when looking up a path.
 >> only one of two simultaneous attempts to remove a single file
 >> should succeed, as should only one of two simultaneous attempts to
 >> create a file with the same name, and so on.
+Inside of the dir struct, we keep a lock. We acquire this lock before
+we lookup to determine whether a name is valid, then after we try
+to add or remove a file. This ensures that after we determine a name
+is valid, we can't switch to another thread that may also determine
+it to be valid. That is, we group together validating a name and
+writing/removing from the directory. This way, if two creations
+of the same name are attempted, the first will succeed, and the second
+will determine that the name is invalid. If two removals occur, the
+same thing will happen; one will succeed, and the other will detect
+an invalid name.
 
 >> B5: Does your implementation allow a directory to be removed if it
 >> is open by a process or if it is in use as a process's current
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
+We allow a directory to be removed, but keep track of it in the
+is_removed field of its inode. If this is set, we disallow future 
+interactions with the directory.
 
 ---- RATIONALE ----
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
-We represent the current directory of a process with its sector number.
-We do so because the sector number allows us to obtain inode or dir structs
-relatively easily, and doesn't depend on having inodes open. This also
-circumvents the fact that inodes and the filesystem are initialized after
-threads. The simplicity of keeping around a sector number rather than a
-struct is very convenient, and makes it so that we don't carry around a
-dynamically allocated resource for the entire thread's lifetime.
+We represent the current directory of a process with an inode pointer.
+This allows us to keep information stored in the inode such as whether
+the directory has been removed, and also allows us to freely convert
+between dir structs and disk_inodes. Because we can store this
+additional information and convert to any other structure if needed,
+an inode * appears to be an ideal candidate for representing the cwd.
 
 			     BUFFER CACHE
 			     ============
