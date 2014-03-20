@@ -137,6 +137,7 @@ bool dir_lookup(const struct dir *dir, const char *name,
         struct inode **inode) {
     struct dir_entry e;
 
+    //TODO figure out deletion here
     /*if (is_removed(dir->inode)) {
         *inode = NULL;
         return false;

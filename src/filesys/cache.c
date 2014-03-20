@@ -182,6 +182,7 @@ void cache_write(block_sector_t sect, const void *addr) {
         
 /* Regularly scheduled writebacks*/
 void cache_daemon(void *aux UNUSED) {
+    PANIC("NOT RUNNING\n");
     while (daemon_should_live) {
         writeback_all();
         timer_sleep(100);
@@ -360,6 +361,7 @@ void read_ahead(void *aux) {
 }
 
 void async_read(block_sector_t sect) {
+    PANIC("Noope\n");
     thread_create("async_read", PRI_DEFAULT, read_ahead, (void *) &sect);
 }
 

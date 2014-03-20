@@ -474,7 +474,7 @@ void release(struct inode *inode) {
     lock_release(&inode->in_lock);
 }
 
-bool is_dir(const struct inode *inode) {
+bool inode_is_dir(const struct inode *inode) {
     return inode->is_dir;
 }
 
