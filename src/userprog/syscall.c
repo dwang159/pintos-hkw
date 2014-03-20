@@ -193,18 +193,6 @@ bool mem_valid(const void *addr) {
             pagedir_get_page(thread_current()->pagedir, addr) != NULL);
 }
 
-/* Checks if the file descriptor is valid. */
-bool fd_valid(int fd) {
-    struct thread *curr = thread_current();
-    // File pointer should not be null unless it is STDIN or STDOUT.
-    if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
-        if ((unsigned) fd >= curr->files.size ||
-            curr->files.data[fd] == NULL) {
-            return false;
-        }
-    return true;
-}
-
 /* Terminates Pintos. */
 void sys_halt() {
     shutdown_power_off();
@@ -291,7 +279,8 @@ int sys_open(const char *filename) {
     }
     lock_release(&filesys_lock);
     if (fi != NULL) {
-        return fd_insert_file(fi);
+        int out = fd_insert_file(fi);
+        return out;
     } else if (dir != NULL) {
         return fd_insert_dir(dir);
     } else {
@@ -301,7 +290,7 @@ int sys_open(const char *filename) {
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
     struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
@@ -317,7 +306,7 @@ int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
 
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
-            fd == STDOUT_FILENO || !fd_valid(fd))
+            fd == STDOUT_FILENO || !fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
 
     if (fd == STDIN_FILENO) {
@@ -340,7 +329,7 @@ int sys_read(int fd, void *buffer, unsigned int size) {
  */
 int sys_write(int fd, const void *buffer, unsigned int size) {
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
-            fd == STDIN_FILENO || !fd_valid(fd))
+            fd == STDIN_FILENO || !fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
 
     if (fd == STDOUT_FILENO) {
@@ -357,7 +346,7 @@ int sys_write(int fd, const void *buffer, unsigned int size) {
 
 /* Changes the next byte to be read or written in file fd to position. */
 void sys_seek(int fd, unsigned int position) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
     struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
@@ -369,8 +358,9 @@ void sys_seek(int fd, unsigned int position) {
  * in file fd.
  */
 unsigned int sys_tell(int fd) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
+
     struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
     unsigned int ret = file_tell(file);
@@ -379,14 +369,18 @@ unsigned int sys_tell(int fd) {
 }
 
 /* Closes file descriptor fd. */
-void sys_close(int fd)
-{
+void sys_close(int fd) {
     if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
 
-    struct file *file = fd_lookup_file(fd);
     lock_acquire(&filesys_lock);
-    file_close(file);
+    if (sys_isdir(fd)) { 
+        struct dir *dir = fd_lookup_dir(fd);
+        dir_close(dir);
+    } else {
+        struct file *file = fd_lookup_file(fd);
+        file_close(file);
+    }
     lock_release(&filesys_lock);
     fd_clear(fd);
 }
@@ -409,11 +403,20 @@ bool sys_readdir(int fd, char *name) {
 }
 
 bool sys_isdir(int fd) {
-    printf("isdir(%d)\n", fd);
-    PANIC("isdir not implemented\n");
+    return fd_valid(fd) ? fd_lookup_dir(fd) : false;
 }
 
 int sys_inumber(int fd) {
-    printf("inumber(%d)\n", fd);
-    PANIC("inumber not implemented\n");
+    struct inode *inode;
+    if (!fd_valid(fd)) {
+        return -1;
+    } else if (sys_isdir(fd)) {
+        struct dir *dir = fd_lookup_dir(fd);
+        inode = dir_get_inode(dir);
+        return inode_get_inumber(inode);
+    } else {
+        struct file *file = fd_lookup_file(fd);
+        inode = file_get_inode(file);
+    }
+    return inode_get_inumber(inode);
 }

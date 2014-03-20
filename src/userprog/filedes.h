@@ -9,4 +9,5 @@ void fd_clear(int fd);
 
 void fd_init(void);
 void fd_destruct(void);
+bool fd_valid(int fd);
 #endif /* USERPROG_FILEDES_H */
