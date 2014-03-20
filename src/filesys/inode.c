@@ -122,15 +122,15 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
         // (BLOCK_SECTOR_SIZE / 4)^2 + BLOCK_SECTOR_SIZE / 4 + N_BLOCKS - 4
         // then it is accessed through 2-indirect addressing. This requires
         // two disk accesses to get the block sector.
-        block_sector_t indirect_2 = disk_inode->i_block[N_BLOCKS - 2];
-        block_sector_t indirect_1;
+        block_sector_t indirect2 = disk_inode->i_block[N_BLOCKS - 2];
+        block_sector_t indirect1;
         start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) /
             (BLOCK_SECTOR_SIZE / 4);
-        cache_read_spec(indirect_2, &indirect_1,
+        cache_read_spec(indirect2, &indirect1,
                 start * sizeof(block_sector_t), sizeof(block_sector_t));
         start = (vblock - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) %
             (BLOCK_SECTOR_SIZE / 4);
-        cache_read_spec(indirect_1, &result,
+        cache_read_spec(indirect1, &result,
                 start * sizeof(block_sector_t), sizeof(block_sector_t));
     } else {
         PANIC("Level 3 indirect addressing not implemented.\n");
@@ -168,6 +168,7 @@ bool inode_create(block_sector_t sector, off_t length, bool is_dir,
         return false;
     }
     size_t sectors = bytes_to_sectors(length);
+    length = BLOCK_SECTOR_SIZE * sectors;
     disk_inode->length = length;
     disk_inode->magic = INODE_MAGIC;
     disk_inode->blocks_used = 0;
@@ -329,7 +330,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     if (offset + size > inode->length) {
         extend_to(inode, offset + size);
     }
-    
+
     while (size > 0) {
         /* Sector to write, starting byte offset within sector. */
         block_sector_t sector_idx = byte_to_sector(inode, offset);
@@ -358,10 +359,13 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     return bytes_written;
 }
 
+/* Extends the number of blocks used by the file to contain the offset
+ * provided.
+ */
 void extend_to(struct inode *inode, off_t offset) {
     struct inode_disk *disk_inode = malloc(sizeof(struct inode_disk));
     cache_read(inode->sector, disk_inode);
-    int num_blocks = offset / BLOCK_SECTOR_SIZE - disk_inode->blocks_used;
+    int num_blocks = bytes_to_sectors(offset) - disk_inode->blocks_used;
 
     while (num_blocks > 0) {
         block_sector_t block;
@@ -415,7 +419,6 @@ static bool append_sector(struct inode_disk *disk_inode,
             return false;
         }
     }
-    //TODO Wat?
     *result = disk_inode->next_block;
     disk_inode->next_block++;
     disk_inode->group_blocks_free--;
@@ -473,6 +476,11 @@ static bool append_sector(struct inode_disk *disk_inode,
                 return false;
             }
             cache_write_spec(indirect2, &indirect1,
+                    index2 * sizeof(block_sector_t), sizeof(block_sector_t));
+        } else {
+            // Read the location of the indirect1 block from the indirect2
+            // block.
+            cache_read_spec(indirect2, &indirect1,
                     index2 * sizeof(block_sector_t), sizeof(block_sector_t));
         }
         // Write the location of the newly allocated block to the
