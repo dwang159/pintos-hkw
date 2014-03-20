@@ -90,8 +90,7 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
 
     ASSERT(inode != NULL);
     // Read in the data.
-    struct inode_disk *disk_inode = (struct inode_disk *) malloc(
-            sizeof(struct inode_disk));
+    struct inode_disk *disk_inode = &buf;
     ASSERT(disk_inode);
     cache_read(inode->sector, disk_inode);
     if (pos >= disk_inode->length) {
@@ -135,7 +134,6 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     } else {
         PANIC("Level 3 indirect addressing not implemented.\n");
     }
-    free(disk_inode);
     return result;
 }
 
