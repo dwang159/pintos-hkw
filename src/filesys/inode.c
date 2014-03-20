@@ -477,3 +477,7 @@ void release(struct inode *inode) {
 bool is_dir(const struct inode *inode) {
     return inode->is_dir;
 }
+
+bool is_removed(const struct inode *inode) {
+    return inode->removed;
+}

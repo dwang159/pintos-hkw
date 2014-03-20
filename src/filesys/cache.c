@@ -76,8 +76,8 @@ void cache_init(void) {
          lock_init(&fs_buffer[i].bflock);
      }
     daemon_should_live = true;
-    daemon_pid = thread_create("cache_daemon", PRI_DEFAULT, cache_daemon,
-        NULL);
+    /*daemon_pid = thread_create("cache_daemon", PRI_DEFAULT, cache_daemon,
+        NULL);*/
 }
 
 /* Kills the daemon when the filesystem is closed. */
@@ -123,7 +123,7 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
         lock_release(&full_buf_lock);
         block_read(fs_device, sect, buff_actual);
     }
-    async_read(sect + 1);
+    //async_read(sect + 1);
     at_most_one();
     memcpy(addr, buff_actual + offset, size);
     slot_release(slot_id);
