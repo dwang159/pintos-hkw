@@ -63,10 +63,6 @@ struct file *fd_lookup_file(int fd) {
 
 struct dir *fd_lookup_dir(int fd) {
     struct fileordir *fod = thread_current()->files.data[fd];
- //   if (!fod) {
- //       printf("not found: %d\n", fd);
- //       ASSERT(fod);
- //   }
     if (fod && fod->is_dir) {
         return fod->d;
     } else {
