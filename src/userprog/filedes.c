@@ -40,6 +40,7 @@ int insert(void *payload, bool is_dir) {
     } else {
         fod->f = payload;
     }
+    // Start the count at 2 to skip . and ..
     fod->count = 2;
     for (i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
         if (curr->files.data[i] == NULL) {
