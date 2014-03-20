@@ -30,162 +30,125 @@
 # See [IntrList] for details.
 	sub %dx, %dx			# Serial port 0.
 	mov $0xe3, %al			# 9600 bps, N-8-1.
-                            # AH is already 0 (Initialize Port).
-	int $0x14			    # Destroys AX.
+					# AH is already 0 (Initialize Port).
+	int $0x14			# Destroys AX.
 
 	call puts
-	.string "PiLo\r"
+	.string "PiLo"
 
-####        ITERATE THROUGH ALL HARD DISKS IN THE SYSTEM, LOOKING FOR A
-####        BOOTABLE PINTOS PARTITION TO LOAD AND START.
+#### Read the partition table on each system hard disk and scan for a
+#### partition of type 0x20, which is the type that we use for a
+#### Pintos kernel.
 ####
-####        Note that there are only ~300 bytes available for the entire
-####        Pintos bootloader, as Pintos commands are stored in the
-####        region immediately before the partition table in the sector.
-####        Sooo... be concise!
+#### Read [Partitions] for a description of the partition table format
+#### that we parse.
+####
+#### We print out status messages to show the disk and partition being
+#### scanned, e.g. hda1234 as we scan four partitions on the first
+#### hard disk.
 
-# We use 0x20000 as the location for the buffer when reading from the hard
-# drives.
-# When we want to provide a segement:offset pointer to the buffer, use:
-#
-# segment: 0x2000 (in %es)
-# offset: 0x0
-initialize_regs:
-    # Move segment register into %es
-    mov $0x2000, %cx
-    mov %cx, %es
-    # Begin looping through all hard drives.
-    mov $0x80, %dl # DL = starting_harddrive_number
-    mov $DAP, %si  # *SI = disk access packet
-    jmp check_mbr
+	mov $0x80, %dl			# Hard disk 0.
+read_mbr:
+	sub %ebx, %ebx			# Sector 0.
+	mov $0x2000, %ax		# Use 0x20000 for buffer.
+	mov %ax, %es
+	call read_sector
+	jc no_such_drive
 
-DAP:
-    .byte 0x10        # DAP size
+	# Print hd[a-z].
+	call puts
+	.string " hd"
+	mov %dl, %al
+	add $'a' - 0x80, %al
+	call putc
 
-    .byte 0x00        # unused
+	# Check for MBR signature--if not present, it's not a
+	# partitioned hard disk.
+	cmpw $0xaa55, %es:510
+	jne next_drive
 
-    .word 0x1         # 1 sector to read
+	mov $446, %si			# Offset of partition table entry 1.
+	mov $'1', %al
+check_partition:
+	# Is it an unused partition?
+	cmpl $0, %es:(%si)
+	je next_partition
 
-    .word 0x0000      # buffer offset is 0
+	# Print [1-4].
+	call putc
 
-    .word 0x2000      # buffer segment is 0x2000
+	# Is it a Pintos kernel partition?
+	cmpb $0x20, %es:4(%si)
+	jne next_partition
 
-    .long 0x0000      # LBA of sector (last 8 bytes)
-    .long 0x0000      # is just 0
-
-check_mbr:
-    # Read the MBR sector from the drive
-    mov $0x42, %ah  # 0x42 is the argument for Extended Read Sectors
-    int $0x13       # Execute a Low Level Disk Service (extended read)
-
-    # Check status of disk read. The carry flag (CF) is set if
-    # there was an error.
-    jnc read_successful
-    # jc read_unsuccessful
-
-read_unsuccessful:
-    call puts
-    .string "0" # Print '0' in case of disk read error
-    int $0x18   # boot failure in
-
-read_successful:
-    # Check if MBR has boot flag. To do this, check if the
-    # last two bytes of the MBR have values 0x55 and 0xAA.
-    movw %es:0x1fe, %cx # move boot-sector signature into CX
-    cmpw $0xaa55, %cx   # Check that it has the correct values
-    je read_p_table     # If it's a bootable sector, read the part table
-    # jne try_next_disk   Else move to the next hard drive
-
-try_next_disk:
-    # Increment %dl to check the next hard drive
-    inc %dl
-    jmp check_mbr
-
-read_p_table:
-    # Set %si to start of partition entries.
-    mov $0x1be, %si
-p_table_loop:
-    # Iterate through all 4 partitions of this hard drive
-    mov $0x80, %cl       # Move boot flag to CL
-    cmpb %es:0(%si), %cl     # Check for a boot flag on this partition
-    je type_check        # if bootable, check that it has a PINTOS type
-    # jne next_partition # Otherwise, increment and test for end condition
+	# Is it a bootable partition?
+	cmpb $0x80, %es:(%si)
+	je load_kernel
 
 next_partition:
-    # If %esi is at the last partition already, then there are no
-    # pintos partitions we can boot from, so we exit with an error
-    # message.
-    add $0x10, %si    # Move to next ptable entry
-    cmp $0x1ee, %si # Compare to end of ptable
-    jle p_table_loop   # Keep going through them
-    # jg no_boot_part
+	# No match for this partition, go on to the next one.
+	add $16, %si			# Offset to next partition table entry.
+	inc %al
+	cmp $510, %si
+	jb check_partition
 
-no_boot_part:
-    # We have iterated through the partition table with no luck,
-    # so quitting.
-    call puts
-    .string "1" # Print error code 1 for bootable drive with no
-                # boot partition
-    int $0x18
+next_drive:
+	# No match on this drive, go on to the next one.
+	inc %dl
+	jnc read_mbr
 
-type_check:
-    # Check to see if the drive has Pintos type (0x20). If so, start
-    # copying. Otherwise, move to next drive.
-    movb $0x20, %al        # AL = Pintos type
-    cmpb %es:0x4(%si), %al # Compare the 5th byte (off = 4) in partition
-                           # entry to the type
-    jne read_p_table  # If the type is incorrect, keep looking for a part.
-    # je copy kernel    # Else start moving the kernel from this partition
+no_such_drive:
+no_boot_partition:
+	# Didn't find a Pintos kernel partition anywhere, give up.
+	call puts
+	.string "\rNot found\r"
 
-copy_kernel:
-    # %esi points to the start of the partition entry
-    # %dl has the hard disk number
+	# Notify BIOS that boot failed.  See [IntrList].
+	int $0x18
 
-    movl %es:0x08(%si), %ebx # Save the LBA from the partition entry
-    movl %es:0x0c(%si), %ecx  # Save the number of sectors to be loaded
-    mov $DAP, %si        # *ESI = DAP
+#### We found a kernel.  The kernel's drive is in DL.  The partition
+#### table entry for the kernel's partition is at ES:SI.  Our job now
+#### is to read the kernel from disk and jump to its start address.
 
-    # We read 1 sector at a time (since some platforms have
-    # a limit to number of sectors read at a time). We need
-    # to read a max of 1024 sectors to load all 512 KiB of
-    # the kernel.
-    movw $0x01, 0x2(%si)        # Move size to DAP[2]
+load_kernel:
+	call puts
+	.string "\rLoading"
 
-    # Store the target offset in EDI
-    movw $0x2000, %di
-    movw $0x0000, 0x4(%si)
+	# Figure out number of sectors to read.  A Pintos kernel is
+	# just an ELF format object, which doesn't have an
+	# easy-to-read field to identify its own size (see [ELF1]).
+	# But we limit Pintos kernels to 512 kB for other reasons, so
+	# it's easy enough to just read the entire contents of the
+	# partition or 512 kB from disk, whichever is smaller.
+	mov %es:12(%si), %ecx		# EBP = number of sectors
+	cmp $1024, %ecx			# Cap size at 512 kB
+	jbe 1f
+	mov $1024, %cx
+1:
 
-    # Only move 1024 sectors if more than that exist in the partition
-    cmp $0x400, %ecx
-    jl copy_loop
-    movl $0x400, %ecx
+	mov %es:8(%si), %ebx		# EBX = first sector
+	mov $0x2000, %ax		# Start load address: 0x20000
 
-copy_loop:
-    # Invariants:
-    #   ECX is the loop counter
-    #   EDI is the address to write to
-    #   EBX holds the LBA to read the first sector from
-    #   DS:SI points to the DAP
-    #   AH holds the argument for an extended read (0x42)
+next_sector:
+	# Read one sector into memory.
+	mov %ax, %es			# ES:0000 -> load address
+	call read_sector
+	jc read_failed
 
-    movw %di, 0x6(%si)    #Update target in DAP
-    addw $0x0020, %di     # There are 0x200 bytes in each sector,
-                          # and 0x40 sectors read so the target
-                          # should increment by 0x8000
+	# Print '.' as progress indicator once every 16 sectors == 8 kB.
+	test $15, %bl
+	jnz 1f
+	call puts
+	.string "."
+1:
 
-    movl %ebx, 0x8(%si)   # Change start of sector reads
-    movl $0x0, 0xc(%si)   # Keep high bytes 0 still
-    add $0x1, %ebx        # 1 sector read in each iteration,
-                          # so increment the sector to start
-                          # reading from.
+	# Advance memory pointer and disk sector.
+	add $0x20, %ax
+	inc %bx
+	loop next_sector
 
-    # Read the next sector from the drive and write
-    # them to 20000.
-    mov $0x42, %ah
-    int $0x13
-    jc read_unsuccessful   # IF carry flag, wasn't able to copy
-    dec %ecx       # One more batch of sectors copied
-    jnz copy_loop # End the loop if all 32 batches have been copied
+	call puts
+	.string "\r"
 
 #### Transfer control to the kernel that we loaded.  We read the start
 #### address out of the ELF header (see [ELF1]) and convert it from a
@@ -204,13 +167,14 @@ copy_loop:
 	movw $0x2000, start + 2
 	ljmp *start
 
-#### The following label is a placeholder for the preceding code to use
-#### to set up for the jump to the Pintos kernel.  Of course, the start
-#### label also points to the puts function; when the previous code runs,
-#### it will clobber a few of the bytes at the start of the puts function,
-#### but hey we're done bootloading, so we don't need it anymore.
-
+read_failed:
 start:
+	# Disk sector read failed.
+	call puts
+1:	.string "\rBad read\r"
+
+	# Notify BIOS that boot failed.  See [IntrList].
+	int $0x18
 
 #### Print string subroutine.  To save space in the loader, this
 #### subroutine takes its null-terminated string argument from the
@@ -257,13 +221,29 @@ putc:	pusha
 	mov $'\n', %al
 	jmp 1b
 
+#### Sector read subroutine.  Takes a drive number in DL (0x80 = hard
+#### disk 0, 0x81 = hard disk 1, ...) and a sector number in EBX, and
+#### reads the specified sector into memory at ES:0000.  Returns with
+#### carry set on error, clear otherwise.  Preserves all
+#### general-purpose registers.
+
+read_sector:
+	pusha
+	sub %ax, %ax
+	push %ax			# LBA sector number [48:63]
+	push %ax			# LBA sector number [32:47]
+	push %ebx			# LBA sector number [0:31]
+	push %es			# Buffer segment
+	push %ax			# Buffer offset (always 0)
+	push $1				# Number of sectors to read
+	push $16			# Packet size
+	mov $0x42, %ah			# Extended read
+	mov %sp, %si			# DS:SI -> packet
+	int $0x13			# Error code in CF
+	popa				# Pop 16 bytes, preserve flags
 popa_ret:
 	popa
 	ret				# Error code still in CF
-
-
-#### TODO:  YOU CAN PUT HELPER FUNCTIONS HERE IF YOU WISH.
-
 
 #### Command-line arguments and their count.
 #### This is written by the `pintos' utility and read by the kernel.
