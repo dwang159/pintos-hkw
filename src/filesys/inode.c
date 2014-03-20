@@ -13,6 +13,7 @@
 #define INODE_MAGIC 0x494e4f44
 
 static struct inode_disk buf;
+static void extend_to(struct inode *inode, off_t offset);
 
 /* Number of i_blocks. */
 #define N_BLOCKS 15
@@ -76,7 +77,7 @@ struct inode {
     int open_cnt;                /*!< Number of openers. */
     bool removed;                /*!< True if deleted, false otherwise. */
     int deny_write_cnt;          /*!< 0: writes ok, >0: deny writes. */
-    struct inode_disk data;      /*!< Inode content. */
+    off_t length;      /*!< Inode content. */
 };
 
 /*! Returns the block device sector that contains byte offset POS
@@ -222,7 +223,7 @@ struct inode * inode_open(block_sector_t sector) {
     lock_init(&inode->in_lock);
     cache_read(inode->sector, &buf);
     inode->is_dir = buf.is_dir;
-    cache_read(inode->sector, &inode->data);
+    inode->length = buf.length;
     return inode;
 }
 
@@ -355,6 +356,12 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
     return bytes_written;
 }
 
+void extend_to(struct inode *inode, off_t offset) {
+    /* Extends the inode until the offset is valid. */
+    while (offset < inode_length(inode)) {
+        PANIC("Not implemented.");
+    }
+}
 /*! Disables writes to INODE.
     May be called at most once per inode opener. */
 void inode_deny_write (struct inode *inode) {
@@ -377,7 +384,7 @@ void inode_allow_write (struct inode *inode) {
 
 /*! Returns the length, in bytes, of INODE's data. */
 off_t inode_length(const struct inode *inode) {
-    return inode->data.length;
+    return inode->length;
 }
 
 /* Appends a sector to an inode. Returns true if successful, else
