@@ -188,7 +188,11 @@ void lock_init(struct lock *lock) {
 void lock_acquire(struct lock *lock) {
     ASSERT(lock != NULL);
     ASSERT(!intr_context());
-    ASSERT(!lock_held_by_current_thread(lock));
+    if (lock_held_by_current_thread(lock)) {
+        printf("Lock problem: line %d file %s\n", thread_current()->line,
+                thread_current()->file);
+        ASSERT(false);
+    }
 
     struct thread *curr = thread_current();
 

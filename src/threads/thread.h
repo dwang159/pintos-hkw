@@ -24,6 +24,10 @@ enum thread_status {
     THREAD_DYING        /*!< About to be destroyed. */
 };
 
+#define update_thread() \
+    do {thread_current()->line = __LINE__; \
+        strlcpy(thread_current()->file, __FILE__, 24);}\
+       while (false)
 /*! Thread identifier type.
     You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -135,6 +139,9 @@ struct thread {
 
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
+
+    int line;
+    char file[24];
 
     /*! Owned by thread.c. */
     /**@{*/

@@ -135,10 +135,13 @@ static void page_fault(struct intr_frame *f) {
     /* To implement virtual memory, delete the rest of the function
        body, and replace it with code that brings in the page to
        which fault_addr refers. */
-    printf("Page fault at %p: %s error %s page in %s context.\n",
+    printf("Page fault at %p: %s error %s page in %s context.\n"
+            "Line %d in file %s\n",
            fault_addr,
            not_present ? "not present" : "rights violation",
            write ? "writing" : "reading",
-           user ? "user" : "kernel");
+           user ? "user" : "kernel",
+           thread_current()->line,
+           thread_current()->file);
     kill(f);
 }
