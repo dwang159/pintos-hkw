@@ -260,6 +260,17 @@ bool sys_create(const char *file, unsigned int initial_size) {
 bool sys_remove(const char *file) {
     if (!mem_valid(file))
         sys_exit(-1);
+    int fd = sys_open(file);
+    if (sys_isdir(fd)) {
+        char name[16];
+        bool out = sys_readdir(fd, name);
+        sys_close(fd);
+        // Cannot delete a nonempty directior.
+        if (out) {
+            return false;
+        }
+    }
+    sys_close(fd);
 
     lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
