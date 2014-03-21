@@ -60,6 +60,9 @@ struct inode_disk {
 static bool append_sector(struct inode_disk *disk_inode,
         block_sector_t *result);
 
+/* Removes the last sector from an inode. */
+static bool pop_sector(struct inode *inode);
+
 static void acquire(struct inode *inode);
 static void release(struct inode *inode);
 
@@ -91,7 +94,8 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
 
     ASSERT(inode != NULL);
     // Read in the data.
-    struct inode_disk *disk_inode = &buf;
+    struct inode_disk buffer;
+    struct inode_disk *disk_inode = &buffer;
     ASSERT(disk_inode);
     cache_read(inode->sector, disk_inode);
     update_thread();
@@ -269,9 +273,13 @@ void inode_close(struct inode *inode) {
 
         /* Deallocate blocks if removed. */
         if (inode->removed) {
+            struct inode_disk buffer;
+            struct inode_disk *disk_inode = &buffer;
+            cache_read(inode->sector, disk_inode);
+            unsigned i;
+            for (i = 0; i < disk_inode->blocks_used; i++)
+                pop_sector(inode);
             free_map_release(inode->sector, 1);
-
-            // TODO
         }
         release(inode);
         free(inode);
@@ -388,7 +396,8 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
  * provided.
  */
 void extend_to(struct inode *inode, off_t offset) {
-    struct inode_disk *disk_inode = malloc(sizeof(struct inode_disk));
+    struct inode_disk buffer;
+    struct inode_disk *disk_inode = &buffer;
     cache_read(inode->sector, disk_inode);
     int num_blocks = bytes_to_sectors(offset) - disk_inode->blocks_used;
 
@@ -400,7 +409,6 @@ void extend_to(struct inode *inode, off_t offset) {
     disk_inode->length = offset;
     inode->length = offset;
     cache_write(inode->sector, disk_inode);
-    free (disk_inode);
 }
 /*! Disables writes to INODE.
     May be called at most once per inode opener. */
@@ -517,6 +525,61 @@ static bool append_sector(struct inode_disk *disk_inode,
     }
     return true;
 }
+
+/* Frees the last sector of a file. We deallocate blocks as groups, so this
+ * doesn't actually free any blocks until the entire group is free.
+ * Returns true if successful.
+ */
+static bool pop_sector(struct inode *inode) {
+    ASSERT(inode);
+    // Get the address of the last block that was allocated.
+    struct inode_disk buffer;
+    struct inode_disk *disk_inode = &buffer;
+    cache_read(inode->sector, disk_inode);
+    if (disk_inode->blocks_used == 0) {
+        PANIC("File is already empty!\n");
+    }
+    block_sector_t last_block = byte_to_sector(inode, inode->length - 1);
+    // Mark this block as free.
+    disk_inode->next_block = last_block;
+    disk_inode->group_blocks_free++;
+    disk_inode->blocks_used--;
+    // If we reached a group size free, then actually free it.
+    if (disk_inode->group_blocks_free == BLOCKS_PER_GROUP) {
+        // Free the group.
+        free_map_release(last_block, BLOCKS_PER_GROUP);
+        disk_inode->next_block = 0;
+        disk_inode->group_blocks_free = 0;
+        // If there were indirect blocks associated with this block, then
+        // we should free them as well if necessary.
+        unsigned b = disk_inode->blocks_used + 1;
+        if (b == N_BLOCKS - 3) {
+            // Nothing left in the singly indirect block.
+            free_map_release(disk_inode->i_block[N_BLOCKS - 3], 1);
+        } else if (b >= BLOCK_SECTOR_SIZE / 4 + (N_BLOCKS - 3)) {
+            off_t index2 = (b - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) /
+                (BLOCK_SECTOR_SIZE / 4);
+            off_t index1 = (b - BLOCK_SECTOR_SIZE / 4 - (N_BLOCKS - 3)) %
+                (BLOCK_SECTOR_SIZE / 4);
+            block_sector_t indirect1;
+            block_sector_t indirect2 = disk_inode->i_block[N_BLOCKS - 2];
+            if (index1 == 0) {
+                cache_read_spec(indirect2, &indirect1,
+                        index2 * sizeof(block_sector_t),
+                        sizeof(block_sector_t));
+                free_map_release(indirect1, 1);
+                if (index2 == 0) {
+                    free_map_release(indirect2, 1);
+                }
+            }
+        }
+    }
+    // Write back to disk.
+    cache_write(inode->sector, disk_inode);
+    return true;
+}
+
+
 
 void acquire(struct inode *inode) {
     lock_acquire(&inode->in_lock);
