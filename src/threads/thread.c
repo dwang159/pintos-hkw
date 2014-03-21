@@ -64,9 +64,6 @@ static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
 bool thread_exit_status_initialized;
 struct vector thread_exit_status;
 
-// Filesystem lock
-struct lock filesys_lock;
-
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
     Controlled by kernel command-line option "-o mlfqs". */
@@ -116,7 +113,6 @@ void thread_init(void) {
     list_init(&sleep_list);
 
     thread_exit_status_initialized = false;
-    lock_init(&filesys_lock);
 
     /* Initialize each list in ready_lists. */
     for (i = PRI_MIN; i <= PRI_MAX; i++) {
