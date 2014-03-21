@@ -250,9 +250,7 @@ bool sys_create(const char *file, unsigned int initial_size) {
     if (in_deleted_dir()) {
         return false;
     }
-    lock_acquire(&filesys_lock);
     bool ret = filesys_create(file, initial_size);
-    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -273,9 +271,7 @@ bool sys_remove(const char *file) {
         sys_close(fd);
     }
 
-    lock_acquire(&filesys_lock);
     bool ret = filesys_remove(file);
-    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -293,12 +289,10 @@ int sys_open(const char *filename) {
 
     struct file *file = NULL;
     struct dir *dir = NULL;
-    lock_acquire(&filesys_lock);
     file = filesys_open(filename);
     if (file == NULL) {
         dir = filesys_open_dir(filename);
     }
-    lock_release(&filesys_lock);
     if (file != NULL) {
         int out = fd_insert_file(file);
         return out;
@@ -315,9 +309,7 @@ int sys_filesize(int fd) {
     if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
     struct file *file = fd_lookup_file(fd);
-    lock_acquire(&filesys_lock);
     int ret = file_length(file);
-    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -339,9 +331,7 @@ int sys_read(int fd, void *buffer, unsigned int size) {
         return size;
     } else {
         struct file *file = fd_lookup_file(fd);
-        lock_acquire(&filesys_lock);
         int ret = (int) file_read(file, buffer, size);
-        lock_release(&filesys_lock);
         return ret;
     }
 }
@@ -359,9 +349,7 @@ int sys_write(int fd, const void *buffer, unsigned int size) {
         return size;
     } else {
         struct file *file = fd_lookup_file(fd);
-        lock_acquire(&filesys_lock);
         int ret = (int) file_write(file, buffer, size);
-        lock_release(&filesys_lock);
         return ret;
     }
 }
@@ -371,9 +359,7 @@ void sys_seek(int fd, unsigned int position) {
     if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
     struct file *file = fd_lookup_file(fd);
-    lock_acquire(&filesys_lock);
     file_seek(file, position);
-    lock_release(&filesys_lock);
 }
 
 /* Returns the position of the next byte to be read or written
@@ -384,9 +370,7 @@ unsigned int sys_tell(int fd) {
         sys_exit(-1);
 
     struct file *file = fd_lookup_file(fd);
-    lock_acquire(&filesys_lock);
     unsigned int ret = file_tell(file);
-    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -395,7 +379,6 @@ void sys_close(int fd) {
     if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
 
-    lock_acquire(&filesys_lock);
     if (sys_isdir(fd)) { 
         struct dir *dir = fd_lookup_dir(fd);
         dir_close(dir);
@@ -403,7 +386,6 @@ void sys_close(int fd) {
         struct file *file = fd_lookup_file(fd);
         file_close(file);
     }
-    lock_release(&filesys_lock);
     fd_clear(fd);
 }
 

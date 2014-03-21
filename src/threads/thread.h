@@ -162,7 +162,6 @@ struct exit_state {
 };
 
 extern struct vector thread_exit_status;
-extern struct lock filesys_lock;
 
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
