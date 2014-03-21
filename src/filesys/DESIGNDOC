@@ -39,6 +39,36 @@ http://en.wikipedia.org/wiki/Ext2
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/*! On-disk inode.
+    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+struct inode_disk {
+    // File size in bytes.
+    off_t length;
+    // Magic number used to identify inodes.
+    unsigned magic;
+    // Number of blocks currently used by this file.
+    unsigned blocks_used;
+    // Next free block in the group of blocks reserved for this file.
+    // NULL if there are no more free blocks.
+    block_sector_t next_block;
+    // Number of blocks left in the next group reserved for this file.
+    unsigned group_blocks_free;
+    /* Block addressing, contains pointers to other blocks.
+     * 0..N_BLOCKS - 4 are direct addresses
+     * N_BLOCKS - 3 has 1-indirect addresses
+     * N_BLOCKS - 2 has 2-indirect addresses
+     * N_BLOCKS - 1 has 3-indirect addresses (unused).
+     */
+    block_sector_t i_block[N_BLOCKS];
+    // Whether this inode is a directory
+    bool is_dir;
+    // If this inode is a directory, represents the parent directory.
+    // Invalid for files due to hard linking
+    block_sector_t parent;
+    // Fills up the rest of the space in this block.
+    char unused[BLOCK_SECTOR_SIZE - (7 + N_BLOCKS) * 4];
+};
+
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
 
@@ -84,6 +114,18 @@ What we would ddo
 >> indirect blocks?  If not, why did you choose an alternative inode
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
+
+My inode structure is very similar to that of an inode used in the ext2
+filesystem. We have 12 direct-level blocks, 1 set of indirect blocks, and 1 set
+of doubly-indirect blocks. The total number of blocks is 15 (we chose to not
+implement triply-indirect blocks, which is the 15th slot), which is the number
+used by ext2 (changing this number, defined as N_BLOCKS, only changes the
+number of direct blocks). We wanted to maximize the number of direct blocks
+available, so that small files will have better performance by requiring fewer
+lookups to access data. By having one set of indirect and one set of doubly
+indirect blocks, we had enough blocks available to cover the maximum size of
+files supported by pointos (8MB), so there was no need to have more than one of
+each (or to have triply-indirect blocks).
 
 			    SUBDIRECTORIES
 			    ==============
@@ -158,7 +200,7 @@ an invalid name.
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
 We allow a directory to be removed, but keep track of it in the
-is_removed field of its inode. If this is set, we disallow future 
+is_removed field of its inode. If this is set, we disallow future
 interactions with the directory.
 
 ---- RATIONALE ----
