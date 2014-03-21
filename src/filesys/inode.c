@@ -274,12 +274,15 @@ void inode_close(struct inode *inode) {
 
         /* Deallocate blocks if removed. */
         if (inode->removed) {
+            /*
             struct inode_disk buffer;
             struct inode_disk *disk_inode = &buffer;
             cache_read(inode->sector, disk_inode);
             unsigned i;
-            for (i = 0; i < disk_inode->blocks_used; i++)
+            for (i = 0; i < disk_inode->blocks_used; i++) {
                 pop_sector(inode);
+            }
+            */
             free_map_release(inode->sector, 1);
         }
         release(inode);
