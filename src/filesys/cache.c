@@ -70,7 +70,6 @@ static void at_most_one(void);
 
 /* Starts running the cache daemon at filesystem initialization */
 void cache_init(void) {
-     update_thread();
 
      lock_init(&full_buf_lock);
      int i;
@@ -84,7 +83,6 @@ void cache_init(void) {
 
 /* Kills the daemon when the filesystem is closed. */
 void cache_destroy(void) {
-    update_thread();
     daemon_should_live = false;
     writeback_all();
 }
@@ -94,7 +92,6 @@ void cache_destroy(void) {
  * Will consult the cache and only go to the disk if necessary. */
 void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
         off_t size) {
-    update_thread();
     ASSERT(offset >= 0);
     ASSERT(size >= 0);
     at_most_one();
@@ -108,10 +105,8 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
 
     if ((slot_id = buff_lookup(sect)) != -1) {
         ASSERT(have_slot(slot_id));
-        update_thread();
         ASSERT(fs_buffer[slot_id].sect_id == sect);
         have_slot(slot_id);
-        update_thread();
 
         buff_actual = fs_buffer[slot_id].content;
         lock_release(&full_buf_lock);
@@ -119,12 +114,10 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
         slot_id = force_empty_slot();
 
         ASSERT(have_slot(slot_id));
-        update_thread();
         ASSERT(0 <= slot_id);
         at_most_one();
         ASSERT(slot_id < BUF_NUM_SLOTS);
         ASSERT(have_slot(slot_id));
-    update_thread();
         set_sect(slot_id, sect);
         set_inuse(slot_id);
         buff_actual = fs_buffer[slot_id].content;
@@ -135,14 +128,12 @@ void cache_read_spec(block_sector_t sect, void *addr, off_t offset,
     at_most_one();
     memcpy(addr, buff_actual + offset, size);
     slot_release(slot_id);
-    update_thread();
 }
 
 /* Writes the sector sect of the filesystem block device into sect,
  * but of course checks if it is in the cache first. */
 void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
         off_t size) {
-    update_thread();
     ASSERT(offset >= 0);
     ASSERT(size >= 0);
     ASSERT(size + offset <= BLOCK_SECTOR_SIZE);
@@ -153,7 +144,6 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
     if ((slot_id = buff_lookup(sect)) != -1) {
 
         ASSERT(have_slot(slot_id));
-    update_thread();
         ASSERT(fs_buffer[slot_id].sect_id == sect);
         ASSERT(is_inuse(slot_id));
 
@@ -164,7 +154,6 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
         slot_id = force_empty_slot();
 
         ASSERT(have_slot(slot_id));
-    update_thread();
         ASSERT(slot_id >= 0);
         ASSERT(slot_id < BUF_NUM_SLOTS);
 
@@ -182,17 +171,13 @@ void cache_write_spec(block_sector_t sect, const void *addr, off_t offset,
     ASSERT(is_dirty(slot_id));
     memcpy(buff_actual + offset, addr, size);
     slot_release(slot_id);
-    update_thread();
 }
 
 void cache_read(block_sector_t sect, void *addr) {
-    update_thread();
     cache_read_spec(sect, addr, 0, BLOCK_SECTOR_SIZE);
-    update_thread();
 }
 
 void cache_write(block_sector_t sect, const void *addr) {
-    update_thread();
     cache_write_spec(sect, addr, 0, BLOCK_SECTOR_SIZE);
 }
         
@@ -208,7 +193,6 @@ void cache_daemon(void *aux UNUSED) {
 /* Finds the slot that the sector is loaded into, returns
  * -1 on inability to locate it. */
 int buff_lookup(block_sector_t sect) {
-    update_thread();
     ASSERT(have_buffer());
     int i;
     for (i = 0; i < BUF_NUM_SLOTS; i++) {
@@ -217,7 +201,6 @@ int buff_lookup(block_sector_t sect) {
         }
         if (fs_buffer[i].sect_id == sect) {
             ASSERT(!have_slot(i));
-    update_thread();
             if(slot_try_acquire(i)) {
                 return i;
             } else {
@@ -229,13 +212,11 @@ int buff_lookup(block_sector_t sect) {
 }
 
 int force_empty_slot(void) {
-    update_thread();
     ASSERT(have_buffer());
     int ret = passive_empty_slot();
     if (ret == -1) {
         ret = choice_to_evict();
         ASSERT(have_slot(ret));
-    update_thread();
         writeback(ret);
         set_unused(ret);
     }
@@ -243,20 +224,16 @@ int force_empty_slot(void) {
     ASSERT(ret >= 0);
     ASSERT(ret < BUF_NUM_SLOTS);
     ASSERT(have_slot(ret));
-    update_thread();
     return ret;
 }
 
 int passive_empty_slot(void) {
-    update_thread();
     ASSERT(have_buffer());
     int i;
     for (i = 0; i < BUF_NUM_SLOTS; i++) {
         ASSERT(!have_slot(i));
-    update_thread();
         if (!is_inuse(i) && slot_try_acquire(i)) {
             ASSERT(have_slot(i));
-    update_thread();
             return i;
         }
     }
@@ -264,14 +241,12 @@ int passive_empty_slot(void) {
 }
 
 int choice_to_evict(void) {
-    update_thread();
     random_init((unsigned) timer_ticks());
     int num;
     do {
         at_most_one();
         num = (int) (random_ulong() % BUF_NUM_SLOTS);
         ASSERT(!have_slot(num));
-    update_thread();
     } while (!slot_try_acquire(num));
     ASSERT(num >= 0);
     ASSERT(num < BUF_NUM_SLOTS);
@@ -279,9 +254,7 @@ int choice_to_evict(void) {
 }
 
 void writeback(int cache_slot) {
-    update_thread();
     ASSERT(have_slot(cache_slot));
-    update_thread();
     if (is_dirty(cache_slot)) {
         block_write(fs_device, fs_buffer[cache_slot].sect_id,
                 fs_buffer[cache_slot].content);
@@ -291,95 +264,74 @@ void writeback(int cache_slot) {
 }
 
 void writeback_all(void) {
-    update_thread();
     int slot;
     at_most_one();
     for (slot = 0; slot < BUF_NUM_SLOTS; slot++) {
         lock_acquire(&full_buf_lock);
         ASSERT(!have_slot(slot));
-    update_thread();
         bool got = slot_try_acquire(slot);
         lock_release(&full_buf_lock);
         if (got) {
             writeback(slot);
             slot_release(slot);
-    update_thread();
         }
     }
 }
 
 /* Flag manipulation. */
 void set_sect(int slot_id, block_sector_t sect) {
-    update_thread();
     fs_buffer[slot_id].sect_id = sect;
 }
 
 void set_inuse(int slot) {
-    update_thread();
     ASSERT(have_slot(slot));
-    update_thread();
     fs_buffer[slot].flags |= FS_BUF_INUSE;
 }
 
 void set_unused(int slot) {
-    update_thread();
     ASSERT(have_slot(slot));
-    update_thread();
     fs_buffer[slot].flags = FS_BUF_UNUSED;
 }
 
 void set_dirty(int slot) {
-    update_thread();
     ASSERT(have_slot(slot));
-    update_thread();
     fs_buffer[slot].flags |= FS_BUF_DIRTY;
 }
 
 void clear_dirty(int slot) {
-    update_thread();
     ASSERT(have_slot(slot));
-    update_thread();
     fs_buffer[slot].flags &= !FS_BUF_DIRTY;
 }
 
 bool is_dirty(int slot) {
-    update_thread();
     return fs_buffer[slot].flags & FS_BUF_DIRTY;
 }
 
 bool is_inuse(int slot) {
-    update_thread();
     return fs_buffer[slot].flags & FS_BUF_INUSE;
 }
 
 /* Synchronization */
 bool slot_try_acquire(int slot_id) {
-    update_thread();
     ASSERT(0 <= slot_id);
     ASSERT(slot_id < BUF_NUM_SLOTS);
     ASSERT(have_buffer());
     ASSERT(!have_slot(slot_id));
-    update_thread();
     bool out = lock_try_acquire(&fs_buffer[slot_id].bflock);
     ASSERT(out == have_slot(slot_id));
-    update_thread();
     return out;
 }
 
 void slot_release(int slot_id) {
-    update_thread();
     ASSERT(0 <= slot_id);
     ASSERT(slot_id < BUF_NUM_SLOTS);
     ASSERT(have_slot(slot_id));
-    update_thread();
     lock_release(&fs_buffer[slot_id].bflock);
     ASSERT(!have_slot(slot_id));
-    update_thread();
 }
 
 /* Pulls the sector in aux into the cache if it isn't already there. */
 void read_ahead(void *aux) {
-    update_thread();
     block_sector_t sect = *(block_sector_t *) aux;
     int slot_id;
     char *buff_actual;
@@ -393,7 +345,6 @@ void read_ahead(void *aux) {
         lock_release(&full_buf_lock);
 
         ASSERT(have_slot(slot_id));
-    update_thread();
         ASSERT(0 <= slot_id);
         ASSERT(slot_id < BUF_NUM_SLOTS);
 
@@ -404,17 +355,13 @@ void read_ahead(void *aux) {
         buff_actual = fs_buffer[slot_id].content;
         block_read(fs_device, sect, buff_actual);
         slot_release(slot_id);
-    update_thread();
-    update_thread();
     } else {
         slot_release(slot_id);
-    update_thread();
         lock_release(&full_buf_lock);
     }
 }
 
 void async_read(block_sector_t sect) {
-    update_thread();
     thread_create("async_read", PRI_DEFAULT, read_ahead, (void *) &sect);
 }
 
@@ -422,30 +369,23 @@ void async_read(block_sector_t sect) {
 
 /* Checks if thread_current() has permission to access the buffer. */
 bool have_buffer(void) {
-    update_thread();
     return lock_held_by_current_thread(&full_buf_lock);
 }
 
 /* Checks if thread_current() can access this slot. */
 bool have_slot(int slot_id) {
-    update_thread();
-    update_thread();
     bool out = lock_held_by_current_thread(&fs_buffer[slot_id].bflock);
-    update_thread();
     return out;
 }
 
 /* Checks that the current thread has at most one slot open. */
 void at_most_one(void) {
-    update_thread();
     int i;
     int count = 0;
     for (i = 0; i < BUF_NUM_SLOTS; i++) {
         if (have_slot(i)) {
-            update_thread();
             count++;
         }
-        update_thread();
         if (count >= 2) {
             PANIC("Everything you know is wrong\n");
         }

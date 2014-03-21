@@ -158,17 +158,14 @@ bool dir_lookup(const struct dir *dir, const char *name,
     ASSERT(name != NULL);
 
     if (lookup(dir, name, &e, NULL)) {
-        update_thread();
         *inode_p = inode_open(e.inode_sector);
         if (inode_is_removed(*inode_p)) {
             *inode_p = NULL;
         }
-        update_thread();
     }
     else
         *inode_p = NULL;
 
-update_thread();
     return *inode_p != NULL;
 }
 
@@ -192,7 +189,6 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     lock_acquire(&(dir->dlock));
     /* Check that NAME is not in use. */
     if (lookup(dir, name, NULL, NULL)) {
-    update_thread();
         goto done;
     }
 
@@ -203,14 +199,11 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
      * inode_read_at() will only return a short read at end of file.
      * Otherwise, we'd need to verify that we didn't get a short
      * read due to something intermittent such as low memory. */
-update_thread();
     for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
             ofs += sizeof(e)) {
-        update_thread();
         if (!e.in_use)
             break;
     }
-update_thread();
 
     /* Write slot. */
     e.in_use = true;
@@ -237,11 +230,9 @@ bool dir_remove(struct dir *dir, const char *name) {
     lock_acquire(&dir->dlock);
     /* Find directory entry. */
     if (!lookup(dir, name, &e, &ofs)) {
-        update_thread();
         goto done;
     }
 
-update_thread();
     /* Open inode. */
     inode = inode_open(e.inode_sector);
     if (inode == NULL)
@@ -268,16 +259,13 @@ done:
 bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
     struct dir_entry e;
 
-update_thread();
     while(inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
-        update_thread();
         dir->pos += sizeof(e);
         if (e.in_use) {
             strlcpy(name, e.name, NAME_MAX + 1);
             return true;
         } 
     }
-update_thread();
     return false;
 }
 
@@ -309,7 +297,6 @@ struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
     while (tok != NULL) {
         old = d;
         dir_lookup(d, tok, &i);
-update_thread();
         d = dir_open(i);
         tok = strtok_r(NULL, "/", buf);
         if (tok == NULL) {
@@ -345,7 +332,6 @@ bool dir_chdir(const char *name) {
 
     struct inode *i;
     if (!dir_lookup(d, dname, &i)) {
-        update_thread();
         return false;
     }
     d = dir_open(i);

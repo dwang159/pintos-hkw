@@ -72,17 +72,13 @@ struct file * filesys_open(const char *name) {
     struct inode *inode = NULL;
     if (dir != NULL)
         dir_lookup(dir, fname, &inode);
-update_thread();
     dir_close(dir);
     free(fname);
 
-update_thread();
 
     if(inode_is_dir(inode)) {
-update_thread();
         return false;
     } else {
-update_thread();
         return file_open(inode);
     }
 }
