@@ -13,7 +13,6 @@
 /*! Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
-static struct inode_disk buf;
 static void extend_to(struct inode *inode, off_t offset);
 
 /* Number of i_blocks. */
@@ -91,16 +90,15 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
 
     ASSERT(inode != NULL);
     // Read in the data.
-    struct inode_disk *disk_inode = &buf;
+    struct inode_disk *disk_inode = malloc(sizeof (struct inode_disk));
     ASSERT(disk_inode);
     cache_read(inode->sector, disk_inode);
     update_thread();
-    if (pos >= disk_inode->length) {
+    if (pos > disk_inode->length) {
     update_thread();
         return -1;
     }
     update_thread();
-
     // The virtual block we want (the block offset within the file if
     // the file was linear).
     unsigned vblock = pos / BLOCK_SECTOR_SIZE;
@@ -147,6 +145,7 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     } else {
         PANIC("Level 3 indirect addressing not implemented.\n");
     }
+    free(disk_inode);
     return result;
 }
 
@@ -187,7 +186,7 @@ bool inode_create(block_sector_t sector, off_t length, bool is_dir,
     disk_inode->is_dir = is_dir;
     disk_inode->parent = parent;
     unsigned i;
-    static char zeros[BLOCK_SECTOR_SIZE];
+    char *zeros = calloc(BLOCK_SECTOR_SIZE, sizeof(char));
     block_sector_t block;
     for (i = 0; i < sectors; i++) {
         if (append_sector(disk_inode, &block)) {
@@ -200,6 +199,7 @@ bool inode_create(block_sector_t sector, off_t length, bool is_dir,
     // Write inode to disk.
     cache_write(sector, disk_inode);
     free(disk_inode);
+    free(zeros);
     return true;
 }
 
@@ -232,10 +232,12 @@ struct inode * inode_open(block_sector_t sector) {
     inode->deny_write_cnt = 0;
     inode->removed = false;
     lock_init(&inode->in_lock);
-    cache_read(inode->sector, &buf);
+    struct inode_disk *buf = malloc(sizeof(struct inode_disk));
+    cache_read(inode->sector, buf);
     update_thread();
-    inode->is_dir = buf.is_dir;
-    inode->length = buf.length;
+    inode->is_dir = buf->is_dir;
+    inode->length = buf->length;
+    free(buf);
     return inode;
 }
 
@@ -351,7 +353,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         release(inode);
         return 0;
     }
-    if (offset + size > inode->length) {
+    if (offset + size >= inode->length) {
         extend_to(inode, offset + size);
     }
 
