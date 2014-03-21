@@ -62,7 +62,7 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 
 >> A3: Explain how your code avoids a race if two processes attempt to
 >> extend a file at the same time.
-
+What we would ddo 
 >> A4: Suppose processes A and B both have file F open, both
 >> positioned at end-of-file.  If A reads and B writes F at the same
 >> time, A may read all, part, or none of what B writes.  However, A
@@ -181,29 +181,95 @@ an inode * appears to be an ideal candidate for representing the cwd.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+#define BUF_NUM_SLOTS 64
+
+/* Flags to describe state of a slot in the filesystem buffer. */
+#define FS_BUF_UNUSED 0
+#define FS_BUF_INUSE 1
+#define FS_BUF_ACCESSED 2
+#define FS_BUF_DIRTY (4 | FS_BUF_ACCESSED)
+
+/* An entry in the cache, with the payload in content, metadata, and
+ * syncronization struct. */
+struct cache_slot {
+    block_sector_t sect_id;          /* Sector stored here. */
+    struct lock bflock;              /* Lock to prevent race conditions. */
+    unsigned flags;                  /* Dirty, In use, Accessed. */
+    char content[BLOCK_SECTOR_SIZE]; /* The actual contents on disk. */
+};
+
+/* One struct cache_slot per slot in the buffer. */
+struct lock full_buf_lock;
+static struct cache_slot fs_buffer[BUF_NUM_SLOTS];
+
+/* A writeback daemon that occassional backs up the cache to disk. */
+static pid_t daemon_pid;
+static bool daemon_should_live;
 ---- ALGORITHMS ----
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
 >> block to evict.
+We have a clock based algorithm. A static int is rotated around mod 64.
+If the slot we are looking at has it's accessed flag set, we clear
+it and continue. If it isn't accessed, we write this slot back and
+return it.
 
 >> C3: Describe your implementation of write-behind.
-
+For write behind, we have a daemon that is started in cache_init
+inside filesys_init. A thread is started that executes a "writeback_all"
+every 1000 clock cycles by calling timer_sleep. Writeback_all in turn attempts
+to acquire the lock on each slot and continues if it cannot get it., if it does
+acquire the lock and it is dirty then it writes it back to the associated
+sector and releases it.
 >> C4: Describe your implementation of read-ahead.
+After a sector is read, a thread is spawned with the sector number of
+the one after the one just read in the ``void *aux'' argument. That
+thread then looks up the sector in the buffer. If it cannot find it,
+it acquires a cache slot and writes the sector into it. If the sector is
+already in the cache, the read-ahead thread just exits.
 
 ---- SYNCHRONIZATION ----
 
 >> C5: When one process is actively reading or writing data in a
 >> buffer cache block, how are other processes prevented from evicting
 >> that block?
+There are 1 + 64 locks in cache.c: one for the buffer to acquire a lock
+on a slot, and then a lock for each block. If a slot is found in looking up
+a sector, the caller about to do a write has the lock by the time he is aware
+of the slot number. Similarly on eviction. Then the buffer lock is released so
+that other threads can acquire slots, but they won't be able to get this slot
+until the current process's IO finish and it releases the slot lock.
 
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
+A caller, trying to read or write (as in cache_read_spec) gets the buffer
+lock and calls force_empty_slot. The routine force_empty_slot finds an
+empty slot no matter what, as opposed to passive_empty_slot. If force_empty_slot
+needs to evict, it calls choice_to_evict that chooses a good candidate. Upon
+return from choice_to_evict, the running thread holds the return values slot lock.
+It then changes the sector number in the buffer for that slot so that the previous
+holder won't show up in subsequent lookups for it, and  releases the buffer
+lock. It then writes back the contents to the disk if need be, and returns
+the slot number to the caller of force_empty_slot so that it can carry on
+with it's IO.
 
 ---- RATIONALE ----
 
 >> C7: Describe a file workload likely to benefit from buffer caching,
 >> and workloads likely to benefit from read-ahead and write-behind.
+The total amount of cache available is 32k, which isn't very much. Then
+it would work well when writes and reads are over a small area and a small
+number of files, like text-editing.
 
+Read-ahead is most likely to benefit applications like media players, where
+the read of the next sector is needed but the cache miss isn't triggered immediately
+after the last read. Doing it in the background means that the next slice of 
+data needed by the media application doesn't need to do extra work to prefetch it.
+
+Write-behind is useful for applications taht make a significant number of writes
+that are over many syscalls. This way, the writes will be done in memory more often
+than not, and it mitigates wasting the disk controller's time by needlessly making
+several writes that could be waited to be consolidated into a fewer.
 			   SURVEY QUESTIONS
 			   ================
 
