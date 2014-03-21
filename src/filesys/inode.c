@@ -94,7 +94,7 @@ static block_sector_t byte_to_sector(const struct inode *inode, off_t pos) {
     ASSERT(disk_inode);
     cache_read(inode->sector, disk_inode);
     update_thread();
-    if (pos > disk_inode->length) {
+    if (pos >= disk_inode->length) {
     update_thread();
         return -1;
     }
@@ -353,7 +353,7 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
         release(inode);
         return 0;
     }
-    if (offset + size >= inode->length) {
+    if (offset + size > inode->length) {
         extend_to(inode, offset + size);
     }
 
