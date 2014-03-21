@@ -17,7 +17,8 @@ Daniel Wang <dwang@caltech.edu>
 >> What is the Git repository and commit hash for your submission?
 
    Repository URL: https://github.com/dkong1796/pintos-hkw.git
-   commit ...
+   commit: tagged project6
+   commit hash: a942fe9eb
 
 ---- PRELIMINARIES ----
 
@@ -92,7 +93,7 @@ So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
 
 >> A3: Explain how your code avoids a race if two processes attempt to
 >> extend a file at the same time.
-What we would ddo 
+What we would ddo
 >> A4: Suppose processes A and B both have file F open, both
 >> positioned at end-of-file.  If A reads and B writes F at the same
 >> time, A may read all, part, or none of what B writes.  However, A
@@ -305,7 +306,7 @@ number of files, like text-editing.
 
 Read-ahead is most likely to benefit applications like media players, where
 the read of the next sector is needed but the cache miss isn't triggered immediately
-after the last read. Doing it in the background means that the next slice of 
+after the last read. Doing it in the background means that the next slice of
 data needed by the media application doesn't need to do extra work to prefetch it.
 
 Write-behind is useful for applications taht make a significant number of writes
