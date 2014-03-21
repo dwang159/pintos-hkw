@@ -7,12 +7,6 @@
 #define PF_U 0x4    /*!< 0: kernel, 1: user process. */
 /*! @} */
 
-#define MAX_STACK 0x800000
-#define STACK_HEURISTIC 32
-
-#define possibly_stack(esp, ptr) (ptr >= esp - STACK_HEURISTIC &&\
-                                  ptr >= PHYS_BASE - MAX_STACK &&\
-                                  ptr < PHYS_BASE) 
 void exception_init(void);
 void exception_print_stats(void);
 

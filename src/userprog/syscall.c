@@ -1,24 +1,21 @@
-#include <round.h>
+#include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "devices/input.h"
-#include "devices/shutdown.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
+#include <string.h>
 #include "threads/interrupt.h"
-#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "userprog/exception.h"
-#include "userprog/pagedir.h"
-#include "userprog/process.h"
-#include "userprog/syscall.h"
+#include "pagedir.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "filesys/directory.h"
+#include "devices/input.h"
+#include "devices/shutdown.h"
+#include "process.h"
+#include "threads/synch.h"
+#include "userprog/filedes.h"
+#include "lib/user/syscall.h"
 
-#ifdef VM
-#include "vm/page.h"
-#include "vm/fmap.h"
-#include "vm/frame.h"
-#endif /* VM */
 /* Macros to help with arg checking. Checks the pointer to the args
  * and the byte just before the end of the last arg.
  */
@@ -42,7 +39,6 @@ static void syscall_handler(struct intr_frame *f) {
     void *esp = f->esp;
     void *args;
     bool args_valid = true;
-    thread_current()->esp = esp;
 
     /* Check pointer validity */
     if (!check_args_1(esp, int)) {
@@ -149,22 +145,38 @@ static void syscall_handler(struct intr_frame *f) {
         else
             args_valid = false;
         break;
-#ifdef VM
-    case SYS_MMAP:
-        if (check_args_2(args, int, void*)) {
-            off1 = sizeof(int);
-            f->eax = sys_mmap(*((int *) args),
-                              *((void **) (args + off1)));
-        } else
-            args_valid =false;
-        break;
-    case SYS_MUNMAP:
-        if (check_args_1(args, mapid_t))
-            sys_munmap(*((mapid_t *) args));
+    case SYS_CHDIR:
+        if (check_args_1(args, char *))
+            f->eax = (uint32_t ) sys_chdir(*((char **) args));
         else
             args_valid = false;
         break;
-#endif
+    case SYS_MKDIR:
+        if (check_args_1(args, char *))
+            f->eax = (uint32_t) sys_mkdir(*((char **) args));
+        else
+            args_valid = false;
+        break;
+    case SYS_READDIR:
+        if (check_args_2(args, int, char *)) {
+            off1 = sizeof(int);
+            f->eax = (uint32_t )sys_readdir(*((int *) args),
+                                            *((char **) (args + off1)));
+        } else
+            args_valid = false;
+        break;
+    case SYS_ISDIR:
+        if (check_args_1(args, int))
+            f->eax = (uint32_t) sys_isdir(*(int *) args);
+        else
+            args_valid = false;
+        break;
+    case SYS_INUMBER:
+        if (check_args_1(args, int))
+            f->eax = (uint32_t) sys_inumber(*(int *) args);
+        else
+            args_valid = false;
+        break;
     default:
         args_valid = false;
         break;
@@ -178,34 +190,8 @@ static void syscall_handler(struct intr_frame *f) {
 
 /* Checks that addr points into user space on a currently mapped page. */
 bool mem_valid(const void *addr) {
-#ifdef VM
-    return addr != NULL &&
-        spt_lookup(thread_current()->spt, spt_get_key(addr)) != NULL;
-#else /* No VM */
     return (addr != NULL && is_user_vaddr(addr) &&
             pagedir_get_page(thread_current()->pagedir, addr) != NULL);
-#endif
-}
-
-bool mem_writable(const void *addr) {
-    if (mem_valid(addr)) {
-        unsigned key = spt_get_key(addr);
-        struct spt_entry *se = spt_lookup(thread_current()->spt, key);
-        return se && se->writable;
-    }
-    return false;
-}
-
-/* Checks if the file descriptor is valid. */
-bool fd_valid(int fd) {
-    struct thread *curr = thread_current();
-    // File pointer should not be null unless it is STDIN or STDOUT.
-    if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
-        if ((unsigned) fd >= curr->files.size ||
-            curr->files.data[fd] == NULL) {
-            return false;
-        }
-    return true;
 }
 
 /* Terminates Pintos. */
@@ -217,8 +203,6 @@ void sys_halt() {
 void sys_exit(int status) {
     // Set the exit status.
     struct thread *t = thread_current();
-    
-    spt_reclaim_table(t->spt);
 
     // Print exit message.
     printf("%s: exit(%d)\n", t->name, status);
@@ -226,7 +210,6 @@ void sys_exit(int status) {
     // Set exit status.
     struct exit_state *es = thread_exit_status.data[t->tid];
     es->exit_status = status;
-
 
     // Do the rest of the exit process.
     thread_exit();
@@ -242,6 +225,8 @@ pid_t sys_exec(const char *cmd_line) {
     pid_t ret = process_execute(cmd_line);
     intr_set_level(old_level);
     struct exit_state *es = thread_exit_status.data[ret];
+    // Wait until the child process has launched, to measure
+    // whether it was successful or not. 
     sema_down(&es->launching);
     return es->load_successful ? ret : TID_ERROR;
 }
@@ -262,9 +247,10 @@ bool sys_create(const char *file, unsigned int initial_size) {
     if (!mem_valid(file)) {
         sys_exit(-1);
     }
-    lock_acquire(&filesys_lock);
+    if (in_deleted_dir()) {
+        return false;
+    }
     bool ret = filesys_create(file, initial_size);
-    lock_release(&filesys_lock);
     return ret;
 }
 
@@ -272,51 +258,58 @@ bool sys_create(const char *file, unsigned int initial_size) {
 bool sys_remove(const char *file) {
     if (!mem_valid(file))
         sys_exit(-1);
-    lock_acquire(&filesys_lock);
+    int fd = sys_open(file);
+    if (sys_isdir(fd)) {
+        char name[16];
+        bool out = sys_readdir(fd, name);
+        sys_close(fd);
+        // Cannot delete a nonempty directory.
+        if (out) {
+            return false;
+        }
+    } else {
+        sys_close(fd);
+    }
+
     bool ret = filesys_remove(file);
-    lock_release(&filesys_lock);
     return ret;
 }
 
 /* Opens the file called file. Returns the file descriptor or -1
  * on failure.
  * */
-int sys_open(const char *file) {
+int sys_open(const char *filename) {
     /* Check for invalid pointer */
-    if (!mem_valid(file))
+    if (!mem_valid(filename))
         sys_exit(-1);
-    unsigned int i;
-    /* Open file, return -1 on failure */
-    lock_acquire(&filesys_lock);
-    struct file *opened = filesys_open(file);
-    lock_release(&filesys_lock);
-    if (opened == NULL)
+    if (in_deleted_dir()) {
         return -1;
-
-    struct thread *curr = thread_current();
-    ASSERT(curr->files.size >= STDOUT_FILENO + 1);
-
-    /* Insert file into first non-null entry of file descriptor
-     * table. Return the index where the file was inserted
-     */
-    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++) {
-        if (curr->files.data[i] == NULL) {
-            curr->files.data[i] = opened;
-            return i;
-        }
     }
-    /* If all current values are non-null, append */
-    vector_append(&curr->files, opened);
-    return (curr->files.size - 1);
+    /* Open file, return -1 on failure */
+
+    struct file *file = NULL;
+    struct dir *dir = NULL;
+    file = filesys_open(filename);
+    if (file == NULL) {
+        dir = filesys_open_dir(filename);
+    }
+    if (file != NULL) {
+        int out = fd_insert_file(file);
+        return out;
+    } else if (dir != NULL) {
+        int out = fd_insert_dir(dir);
+        return out;
+    } else {
+        return -1;
+    }
 }
 
 /* Returns the size of the file open, given the file descriptor. */
 int sys_filesize(int fd) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
-    lock_acquire(&filesys_lock);
-    int ret = file_length(thread_current()->files.data[fd]);
-    lock_release(&filesys_lock);
+    struct file *file = fd_lookup_file(fd);
+    int ret = file_length(file);
     return ret;
 }
 
@@ -325,16 +318,10 @@ int sys_filesize(int fd) {
  */
 int sys_read(int fd, void *buffer, unsigned int size) {
     unsigned int i;
-    struct thread *curr = thread_current();
-    void *esp = thread_current()->esp;
-    if (fd == STDOUT_FILENO || !fd_valid(fd)) {
+
+    if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
+            fd == STDOUT_FILENO || !fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
-    }
-    if (!possibly_stack(esp, buffer)) {
-        if (!mem_writable(buffer) || !mem_writable(buffer + size - 1)) {
-            sys_exit(-1);
-        }
-    }
 
     if (fd == STDIN_FILENO) {
         for (i = 0; i < size; i++) {
@@ -343,10 +330,8 @@ int sys_read(int fd, void *buffer, unsigned int size) {
         }
         return size;
     } else {
-        lock_acquire(&filesys_lock);
-        int ret = (int) file_read(curr->files.data[fd],
-                buffer, size);
-        lock_release(&filesys_lock);
+        struct file *file = fd_lookup_file(fd);
+        int ret = (int) file_read(file, buffer, size);
         return ret;
     }
 }
@@ -356,166 +341,93 @@ int sys_read(int fd, void *buffer, unsigned int size) {
  */
 int sys_write(int fd, const void *buffer, unsigned int size) {
     if (!mem_valid(buffer) || !mem_valid(buffer + size - 1) ||
-            fd == STDIN_FILENO || !fd_valid(fd))
+            fd == STDIN_FILENO || !fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
 
     if (fd == STDOUT_FILENO) {
         putbuf((char *) buffer, size);
         return size;
     } else {
-        lock_acquire(&filesys_lock);
-        int ret = (int) file_write(thread_current()->files.data[fd],
-                buffer, size);
-        lock_release(&filesys_lock);
+        struct file *file = fd_lookup_file(fd);
+        int ret = (int) file_write(file, buffer, size);
         return ret;
     }
 }
 
 /* Changes the next byte to be read or written in file fd to position. */
 void sys_seek(int fd, unsigned int position) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
-    lock_acquire(&filesys_lock);
-    file_seek(thread_current()->files.data[fd], position);
-    lock_release(&filesys_lock);
+    struct file *file = fd_lookup_file(fd);
+    file_seek(file, position);
 }
 
 /* Returns the position of the next byte to be read or written
  * in file fd.
  */
 unsigned int sys_tell(int fd) {
-    if (!fd_valid(fd))
+    if (!fd_valid(fd) || sys_isdir(fd))
         sys_exit(-1);
-    lock_acquire(&filesys_lock);
-    unsigned int ret = file_tell(thread_current()->files.data[fd]);
-    lock_release(&filesys_lock);
+
+    struct file *file = fd_lookup_file(fd);
+    unsigned int ret = file_tell(file);
     return ret;
 }
 
 /* Closes file descriptor fd. */
-void sys_close(int fd)
-{
-    struct thread *curr = thread_current();
+void sys_close(int fd) {
     if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !fd_valid(fd))
         sys_exit(-1);
-    lock_acquire(&filesys_lock);
-    file_close(curr->files.data[fd]);
-    lock_release(&filesys_lock);
-    curr->files.data[fd] = NULL;
+
+    if (sys_isdir(fd)) { 
+        struct dir *dir = fd_lookup_dir(fd);
+        dir_close(dir);
+    } else {
+        struct file *file = fd_lookup_file(fd);
+        file_close(file);
+    }
+    fd_clear(fd);
 }
 
-#ifdef VM
-/** Project 5 handlers */
-/* Mays a file specified by fdinto consecutive
- * virtual pages starting at addr. */
-mapid_t sys_mmap(int fd, void *uaddr) {
-    // Check that the address is in user memory.
-    if (uaddr == NULL) {
-        return -1;
-    }
-    if  (uaddr == NULL || !is_user_vaddr(uaddr)) {
+bool sys_chdir(const char *dir) {
+    if (strlen(dir) == 0)
+        return false;
+    return dir_chdir(dir);
+}
+
+bool sys_mkdir(const char *dir) {
+    if (strlen(dir) == 0)
+        return false;
+    return dir_mkdir(dir, 16);
+}
+
+bool sys_readdir(int fd, char *name) {
+    if (!fd_valid(fd)) {
         sys_exit(-1);
     }
+    if (!sys_isdir(fd)) {
+        return false;
+    }
+    struct dir *dir = fd_lookup_dir(fd);
+    int i = fd_count_dir(fd);
+    return dir_entry_name(dir, i, name);
+}
 
-    // Can't open an invalid file.
+bool sys_isdir(int fd) {
+    return fd_valid(fd) ? fd_lookup_dir(fd) : false;
+}
+
+int sys_inumber(int fd) {
+    struct inode *inode;
     if (!fd_valid(fd)) {
         return -1;
+    } else if (sys_isdir(fd)) {
+        struct dir *dir = fd_lookup_dir(fd);
+        inode = dir_get_inode(dir);
+        return inode_get_inumber(inode);
+    } else {
+        struct file *file = fd_lookup_file(fd);
+        inode = file_get_inode(file);
     }
-    
-    // Check that the address is page aligned
-    if (pg_ofs(uaddr)) {
-        return -1;
-        sys_exit(-1);
-    }
-
-    struct file *file = thread_current()->files.data[fd];
-    struct file *hidden= file_reopen(file);
-    lock_acquire(&filesys_lock);
-    off_t len = file_length(hidden);
-    lock_release(&filesys_lock);
-
-    // Doesn't bother with zero length files.
-    if (len == 0 ) {
-        return -1;
-    }
-    // Fail if the file is too large to fit in user memory.
-    if  (!is_user_vaddr(uaddr + len)) {
-        sys_exit(-1);
-    }
-    struct thread *curr = thread_current();
-
-    struct hash_iterator i;
-    void *new_beg = uaddr;
-    void *new_end = (void *)ROUND_UP((int) uaddr + len, PGSIZE);
-    void *old_beg, *old_end;
-    hash_first(&i, &curr->spt->data);
-    while (hash_next (&i)) {
-        struct spt_entry *se = hash_entry(hash_cur(&i), struct spt_entry,
-                elem);
-        old_beg = (void *) se->key;
-        old_end = (void *) se->key + PGSIZE;
-        /* If the new section starts before the end of the first,
-         * make sure it ends before the first begins */
-        if (new_beg < old_end && new_end >= old_beg) {
-            return -1;
-        }
-        /* Likewise in the other direction */
-        if (old_beg < new_end && old_end >= new_beg) {
-            return -1;
-        }
-    }
-        
-
-    struct spt_entry *se;
-    uint32_t read_bytes = (uint32_t) len;
-    uint32_t zero_bytes = ROUND_UP(read_bytes, PGSIZE) - read_bytes;
-    size_t page_read_bytes;
-    size_t page_zero_bytes;
-    off_t ofs = 0;
-    unsigned num_pages = 0;
-    void *read_addr = uaddr;
-    while (read_bytes > 0 || zero_bytes > 0) {
-        num_pages++;
-        page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-        page_zero_bytes = PGSIZE - page_read_bytes;
-        se = spt_create_entry(spt_get_key(read_addr));
-        spt_update_status(se, SPT_FILESYS, SPT_SWAP, true);
-        spt_update_filesys(se, hidden, ofs, page_read_bytes, 
-                page_zero_bytes);
-        se->is_mmap = true;
-        spt_insert(curr->spt, se);
-
-        /* Advance */
-        read_bytes -= page_read_bytes;
-        zero_bytes -= page_zero_bytes;
-        ofs += PGSIZE;
-        read_addr += PGSIZE;
-    }
-    mapid_t key = fmap_generate_id();
-    struct fmap_entry *fme = fmap_create_entry(key);
-    // Need to keep the inode open even if the callee closes .
-    fmap_update(fme, fd, uaddr, hidden, num_pages);
-    fmap_insert(curr->fmap, fme);
-    return key;
+    return inode_get_inumber(inode);
 }
-
-/* Unmaps the file-memory correspondence associated with
- * `mapping.` */
-void sys_munmap(mapid_t mapping) {
-    struct thread *curr = thread_current();
-    struct fmap_entry *fme = fmap_lookup(curr->fmap, mapping);
-    void *uaddr = fme->addr;
-    ASSERT(pg_ofs(uaddr) == 0);
-    unsigned count = fme->num_pages;
-    unsigned key;
-    while(count--) {
-        // Remove each spt entry associated with the mapping.
-        key = spt_get_key(uaddr);
-        struct spt_entry *spe = spt_lookup(curr->spt, key);
-        spt_writeback(spe, false);
-        spt_update_status(spe, SPT_INVALID, SPT_SWAP, false);
-        uaddr += PGSIZE;
-    }
-    file_close(fme->hidden);
-}
-#endif /* VM */

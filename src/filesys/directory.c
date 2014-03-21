@@ -5,9 +5,15 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+#include "filesys/free-map.h"
+#include "filesys/inode.h"
+#include "lib/user/syscall.h"
+#include "threads/synch.h"
 
 /*! A directory. */
 struct dir {
+    struct lock dlock;                  // Lock for creation/deletion of files
     struct inode *inode;                /*!< Backing store. */
     off_t pos;                          /*!< Current position. */
 };
@@ -21,8 +27,42 @@ struct dir_entry {
 
 /*! Creates a directory with space for ENTRY_CNT entries in the
     given SECTOR.  Returns true if successful, false on failure. */
-bool dir_create(block_sector_t sector, size_t entry_cnt) {
-    return inode_create(sector, entry_cnt * sizeof(struct dir_entry));
+bool dir_create(block_sector_t sector, size_t entry_cnt, block_sector_t par) {
+    if(inode_create(sector, entry_cnt * sizeof(struct dir_entry), 
+            true, par)) {
+        struct dir *d = dir_open(inode_open(sector));
+        if (dir_add(d, ".", sector) && dir_add(d, "..", par)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Makes a directory at the specified path with the specified name, where
+ * this information is encoded in NAME. Allow this new directory to have
+ * entry_cnt entries */
+bool dir_mkdir(const char *name, size_t entry_cnt) {
+    block_sector_t inode_sector = 0;
+    char *dname = malloc(strlen(name));
+    if (dname == NULL)
+        return false;
+    struct dir *d = dir_open_name(name, dname);
+    if (d == NULL) {
+        free(dname);
+        return false;
+    }
+
+    // Create the new directory
+    bool success = (d != NULL &&
+                    free_map_allocate(1, &inode_sector) &&
+                    dir_create(inode_sector, entry_cnt, 
+                        inode_get_inumber(d->inode)) &&
+                    dir_add(d, dname, inode_sector));
+    if (!success && inode_sector != 0)
+        free_map_release(inode_sector, 1);
+    dir_close(d);
+    free(dname);
+    return success;
 }
 
 /*! Opens and returns the directory for the given INODE, of which
@@ -32,6 +72,7 @@ struct dir * dir_open(struct inode *inode) {
     if (inode != NULL && dir != NULL) {
         dir->inode = inode;
         dir->pos = 0;
+        lock_init(&dir->dlock);
         return dir;
     }
     else {
@@ -79,34 +120,56 @@ static bool lookup(const struct dir *dir, const char *name,
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
-         ofs += sizeof(e)) {
+    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
+             ofs += sizeof(e)) {
         if (e.in_use && !strcmp(name, e.name)) {
-            if (ep != NULL)
+            if (ep != NULL) {
                 *ep = e;
-            if (ofsp != NULL)
+            }
+            if (ofsp != NULL) {
                 *ofsp = ofs;
+            }
             return true;
         }
     }
     return false;
 }
 
-/*! Searches DIR for a file with the given NAME and returns true if one exists,
-    false otherwise.  On success, sets *INODE to an inode for the file,
-    otherwise to a null pointer.  The caller must close *INODE. */
-bool dir_lookup(const struct dir *dir, const char *name, struct inode **inode) {
+bool dir_entry_name(const struct dir *dir, size_t i, char *name) {
+    size_t ofs = i * sizeof(struct dir_entry);
+    struct dir_entry e;
+    if (inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e)) {
+        if (e.in_use) {
+            strlcpy(name, e.name, READDIR_MAX_LEN);
+            return true;
+        }
+    }
+    return false;
+}
+
+/*! Searches DIR for a file with the given NAME and returns true if one
+    exists, false otherwise.  On success, sets *INODE to an inode for the
+    file, otherwise to a null pointer.  The caller must close *INODE. */
+bool dir_lookup(const struct dir *dir, const char *name,
+        struct inode **inode_p) {
     struct dir_entry e;
 
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    if (lookup(dir, name, &e, NULL))
-        *inode = inode_open(e.inode_sector);
+    if (lookup(dir, name, &e, NULL)) {
+        update_thread();
+        *inode_p = inode_open(e.inode_sector);
+        if (inode_is_removed(*inode_p)) {
+            *inode_p = NULL;
+        }
+        update_thread();
+    }
     else
-        *inode = NULL;
+        *inode_p = NULL;
 
-    return *inode != NULL;
+update_thread();
+    return *inode_p != NULL;
 }
 
 /*! Adds a file named NAME to DIR, which must not already contain a file by
@@ -126,22 +189,28 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     if (*name == '\0' || strlen(name) > NAME_MAX)
         return false;
 
+    lock_acquire(&(dir->dlock));
     /* Check that NAME is not in use. */
-    if (lookup(dir, name, NULL, NULL))
+    if (lookup(dir, name, NULL, NULL)) {
+    update_thread();
         goto done;
+    }
 
     /* Set OFS to offset of free slot.
-       If there are no free slots, then it will be set to the
-       current end-of-file.
-     
-       inode_read_at() will only return a short read at end of file.
-       Otherwise, we'd need to verify that we didn't get a short
-       read due to something intermittent such as low memory. */
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
-         ofs += sizeof(e)) {
+     * If there are no free slots, then it will be set to the
+     * current end-of-file.
+     *
+     * inode_read_at() will only return a short read at end of file.
+     * Otherwise, we'd need to verify that we didn't get a short
+     * read due to something intermittent such as low memory. */
+update_thread();
+    for(ofs = 0; inode_read_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
+            ofs += sizeof(e)) {
+        update_thread();
         if (!e.in_use)
             break;
     }
+update_thread();
 
     /* Write slot. */
     e.in_use = true;
@@ -150,6 +219,7 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     success = inode_write_at(dir->inode, &e, sizeof(e), ofs) == sizeof(e);
 
 done:
+    lock_release((&dir->dlock));
     return success;
 }
 
@@ -164,10 +234,14 @@ bool dir_remove(struct dir *dir, const char *name) {
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
+    lock_acquire(&dir->dlock);
     /* Find directory entry. */
-    if (!lookup(dir, name, &e, &ofs))
+    if (!lookup(dir, name, &e, &ofs)) {
+        update_thread();
         goto done;
+    }
 
+update_thread();
     /* Open inode. */
     inode = inode_open(e.inode_sector);
     if (inode == NULL)
@@ -184,21 +258,136 @@ bool dir_remove(struct dir *dir, const char *name) {
 
 done:
     inode_close(inode);
+    lock_release(&dir->dlock);
     return success;
 }
 
-/*! Reads the next directory entry in DIR and stores the name in NAME.  Returns
-    true if successful, false if the directory contains no more entries. */
+/*! Reads the next directory entry in DIR and stores the name in NAME.
+    Returns true if successful, false if the directory contains no more
+    entries. */
 bool dir_readdir(struct dir *dir, char name[NAME_MAX + 1]) {
     struct dir_entry e;
 
-    while (inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
+update_thread();
+    while(inode_read_at(dir->inode, &e, sizeof(e), dir->pos) == sizeof(e)) {
+        update_thread();
         dir->pos += sizeof(e);
         if (e.in_use) {
             strlcpy(name, e.name, NAME_MAX + 1);
             return true;
         } 
     }
+update_thread();
     return false;
 }
 
+/* Given a path, opens the parent directory of the specified file and returns
+ * a pointer to it. If an invalid path is given, returns NULL */
+struct dir * dir_open_parent(const char * name, block_sector_t cwd) {
+    char *copied_name = malloc(strlen(name));
+    if (copied_name == NULL)
+        return NULL;
+
+    char **buf = malloc(strlen(name));
+    if (buf == NULL)
+        return NULL;
+
+    bool absolute = (name[0] == '/');
+    struct dir *d, *old;
+
+    strlcpy(copied_name, name, strlen(name) + 1);
+    if (absolute) {
+        d = dir_open_root();
+    } else {
+        d = dir_open(inode_open(cwd));
+    }
+
+    // Tokenize string, then open each directory starting from the root
+    // or the current working directory.
+    struct inode *i;
+    char *tok = strtok_r(copied_name, "/", buf);
+    while (tok != NULL) {
+        old = d;
+        dir_lookup(d, tok, &i);
+update_thread();
+        d = dir_open(i);
+        tok = strtok_r(NULL, "/", buf);
+        if (tok == NULL) {
+            d = old;
+            break;
+        }
+        if (d == NULL) {
+            free(copied_name);
+            free(buf);
+            return NULL;
+        }
+        dir_close(old);
+    }
+    free(buf);
+    free(copied_name);
+    return d;
+}
+
+/* Determines whether a given name is a filename or a path */
+bool dir_is_path(const char *name) {
+    return (strchr(name, '/') != NULL);
+}
+
+bool dir_chdir(const char *name) {
+    char *dname = malloc(strlen(name));
+    if (dname == NULL)
+        return false;
+    struct dir *d = dir_open_name(name, dname);
+    if (d == NULL) {
+        free (dname);
+        return false;
+    }
+
+    struct inode *i;
+    if (!dir_lookup(d, dname, &i)) {
+        update_thread();
+        return false;
+    }
+    d = dir_open(i);
+    if (d == NULL) {
+        free(dname);
+        return false;
+    }
+    thread_current()->dir = d->inode;
+    free(dname);
+    return true;
+}
+
+bool in_deleted_dir(void) {
+    struct inode *cwd_inode = thread_current()->dir;
+    return inode_is_removed(cwd_inode);
+}
+
+/* Given the path name of a directory, opens that directory and separates 
+ * the file name from the path, putting it into fname */
+struct dir *dir_open_name(const char *name, char *fname) {
+    struct dir *dir;
+    char *copied_name = malloc(strlen(name));
+    if (copied_name == NULL)
+        return NULL;
+
+    strlcpy(copied_name, name, strlen(name) + 1);
+    // Open the specified directory. If not given a name requiring
+    // directory traversal, opens the current working directory.
+    block_sector_t cwd = inode_get_inumber(thread_current()->dir);
+    if (dir_is_path(copied_name)) {
+        dir = dir_open_parent(copied_name, cwd);
+    } else {
+        dir = dir_open(inode_open(cwd));
+    }
+    // Find the actual name of the directory
+    char *aname = strrchr(copied_name, '/');
+    if (aname != NULL) {
+        aname ++;
+    } else {
+        aname = copied_name;
+    }
+    strlcpy(fname, aname, strlen(aname) + 1);
+    free(copied_name);
+    return dir;
+}

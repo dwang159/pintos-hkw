@@ -1,0 +1,338 @@
+       	       	     +-------------------------+
+                     |          CS 124         |
+                     | PROJECT 6: FILE SYSTEMS |
+                     |     DESIGN DOCUMENT     |
+                     +-------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Tim Holland <thollan@caltech.edu>
+Daniel Kong <dkong@caltech.edu>
+Daniel Wang <dwang@caltech.edu>
+
+>> Specify how many late tokens you are using on this assignment:
+
+>> What is the Git repository and commit hash for your submission?
+
+   Repository URL: https://github.com/dkong1796/pintos-hkw.git
+   commit ...
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course instructors.
+
+http://en.wikipedia.org/wiki/Ext2
+
+		     INDEXED AND EXTENSIBLE FILES
+		     ============================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+/*! On-disk inode.
+    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+struct inode_disk {
+    // File size in bytes.
+    off_t length;
+    // Magic number used to identify inodes.
+    unsigned magic;
+    // Number of blocks currently used by this file.
+    unsigned blocks_used;
+    // Next free block in the group of blocks reserved for this file.
+    // NULL if there are no more free blocks.
+    block_sector_t next_block;
+    // Number of blocks left in the next group reserved for this file.
+    unsigned group_blocks_free;
+    /* Block addressing, contains pointers to other blocks.
+     * 0..N_BLOCKS - 4 are direct addresses
+     * N_BLOCKS - 3 has 1-indirect addresses
+     * N_BLOCKS - 2 has 2-indirect addresses
+     * N_BLOCKS - 1 has 3-indirect addresses (unused).
+     */
+    block_sector_t i_block[N_BLOCKS];
+    // Whether this inode is a directory
+    bool is_dir;
+    // If this inode is a directory, represents the parent directory.
+    // Invalid for files due to hard linking
+    block_sector_t parent;
+    // Fills up the rest of the space in this block.
+    char unused[BLOCK_SECTOR_SIZE - (7 + N_BLOCKS) * 4];
+};
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+Let b = BLOCK_SECTOR_SIZE = 512 for convenience.
+
+Direct:
+We have 12 direct blocks = 12 * 512 = 6144 bytes
+
+Indirect:
+We have b / 4 indirect blocks = 128 * 512 = 65536 bytes
+
+Doubly indirect addressing:
+We have (b / 4)^2 doubly indirect blocks = 128^2 * 512 = 8,388,608 bytes
+
+Triply indirect addressing:
+Not implemented.
+
+So in total, the maximum file size supported is 8,460,288 bytes = 8.4MB.
+
+---- SYNCHRONIZATION ----
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+What we would ddo 
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, many processes reading from a file cannot
+>> prevent forever another process from writing the file, and many
+>> processes writing to a file cannot prevent another process forever
+>> from reading the file.
+
+---- RATIONALE ----
+
+>> A6: Is your inode structure a multilevel index?  If so, why did you
+>> choose this particular combination of direct, indirect, and doubly
+>> indirect blocks?  If not, why did you choose an alternative inode
+>> structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+
+My inode structure is very similar to that of an inode used in the ext2
+filesystem. We have 12 direct-level blocks, 1 set of indirect blocks, and 1 set
+of doubly-indirect blocks. The total number of blocks is 15 (we chose to not
+implement triply-indirect blocks, which is the 15th slot), which is the number
+used by ext2 (changing this number, defined as N_BLOCKS, only changes the
+number of direct blocks). We wanted to maximize the number of direct blocks
+available, so that small files will have better performance by requiring fewer
+lookups to access data. By having one set of indirect and one set of doubly
+indirect blocks, we had enough blocks available to cover the maximum size of
+files supported by pointos (8MB), so there was no need to have more than one of
+each (or to have triply-indirect blocks).
+
+			    SUBDIRECTORIES
+			    ==============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct dir {
+    struct lock dlock; // Lock for creation/deletion of files in directories
+
+struct thread {
+    // Current directory inode
+    struct inode *dir;
+
+struct inode_disk {
+    ...
+    // Whether this inode is a directory
+    bool is_dir;
+
+    // If this inode is a directory, represents the parent directory.
+    // Invalid for files due to hard linking
+    block_sector_t parent;
+}
+
+struct inode {
+    // whether this inode is a directory
+    bool is_dir;
+}
+
+---- ALGORITHMS ----
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+We begin by determining whether we have been given an absolute or relative
+path. This is done by checking whether the given path name starts with the
+character '/'. If it does, we open the root directory. Otherwise, we open
+the current working directory. We then tokenize the path, separating on
+'/' characters. We use dir_lookup on the current open directory to determine
+which directory to open next. If this is NULL, the path does not exist, and
+we free our resources and return NULL. Otherwise, we open the directory
+that we just looked up and close the old one. If we find that we have
+reached the second to last token, we set our current directory back to our
+old directory before proceeding, ensuring that we have opened the second-to-
+last, rather than last, directory.
+Here, the only difference between absolute and relative paths is the starting
+point for our current open directory. We deal with "." and ".." by entering
+them as entries upon creation of each directory. They can then be treated
+like any other directory when looking up a path.
+
+---- SYNCHRONIZATION ----
+
+>> B4: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+Inside of the dir struct, we keep a lock. We acquire this lock before
+we lookup to determine whether a name is valid, then after we try
+to add or remove a file. This ensures that after we determine a name
+is valid, we can't switch to another thread that may also determine
+it to be valid. That is, we group together validating a name and
+writing/removing from the directory. This way, if two creations
+of the same name are attempted, the first will succeed, and the second
+will determine that the name is invalid. If two removals occur, the
+same thing will happen; one will succeed, and the other will detect
+an invalid name.
+
+>> B5: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If not, how do you prevent it?
+We allow a directory to be removed, but keep track of it in the
+is_removed field of its inode. If this is set, we disallow future
+interactions with the directory.
+
+---- RATIONALE ----
+
+>> B6: Explain why you chose to represent the current directory of a
+>> process the way you did.
+We represent the current directory of a process with an inode pointer.
+This allows us to keep information stored in the inode such as whether
+the directory has been removed, and also allows us to freely convert
+between dir structs and disk_inodes. Because we can store this
+additional information and convert to any other structure if needed,
+an inode * appears to be an ideal candidate for representing the cwd.
+
+			     BUFFER CACHE
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+#define BUF_NUM_SLOTS 64
+
+/* Flags to describe state of a slot in the filesystem buffer. */
+#define FS_BUF_UNUSED 0
+#define FS_BUF_INUSE 1
+#define FS_BUF_ACCESSED 2
+#define FS_BUF_DIRTY (4 | FS_BUF_ACCESSED)
+
+/* An entry in the cache, with the payload in content, metadata, and
+ * syncronization struct. */
+struct cache_slot {
+    block_sector_t sect_id;          /* Sector stored here. */
+    struct lock bflock;              /* Lock to prevent race conditions. */
+    unsigned flags;                  /* Dirty, In use, Accessed. */
+    char content[BLOCK_SECTOR_SIZE]; /* The actual contents on disk. */
+};
+
+/* One struct cache_slot per slot in the buffer. */
+struct lock full_buf_lock;
+static struct cache_slot fs_buffer[BUF_NUM_SLOTS];
+
+/* A writeback daemon that occassional backs up the cache to disk. */
+static pid_t daemon_pid;
+static bool daemon_should_live;
+---- ALGORITHMS ----
+
+>> C2: Describe how your cache replacement algorithm chooses a cache
+>> block to evict.
+We have a clock based algorithm. A static int is rotated around mod 64.
+If the slot we are looking at has it's accessed flag set, we clear
+it and continue. If it isn't accessed, we write this slot back and
+return it.
+
+>> C3: Describe your implementation of write-behind.
+For write behind, we have a daemon that is started in cache_init
+inside filesys_init. A thread is started that executes a "writeback_all"
+every 1000 clock cycles by calling timer_sleep. Writeback_all in turn attempts
+to acquire the lock on each slot and continues if it cannot get it., if it does
+acquire the lock and it is dirty then it writes it back to the associated
+sector and releases it.
+>> C4: Describe your implementation of read-ahead.
+After a sector is read, a thread is spawned with the sector number of
+the one after the one just read in the ``void *aux'' argument. That
+thread then looks up the sector in the buffer. If it cannot find it,
+it acquires a cache slot and writes the sector into it. If the sector is
+already in the cache, the read-ahead thread just exits.
+
+---- SYNCHRONIZATION ----
+
+>> C5: When one process is actively reading or writing data in a
+>> buffer cache block, how are other processes prevented from evicting
+>> that block?
+There are 1 + 64 locks in cache.c: one for the buffer to acquire a lock
+on a slot, and then a lock for each block. If a slot is found in looking up
+a sector, the caller about to do a write has the lock by the time he is aware
+of the slot number. Similarly on eviction. Then the buffer lock is released so
+that other threads can acquire slots, but they won't be able to get this slot
+until the current process's IO finish and it releases the slot lock.
+
+>> C6: During the eviction of a block from the cache, how are other
+>> processes prevented from attempting to access the block?
+A caller, trying to read or write (as in cache_read_spec) gets the buffer
+lock and calls force_empty_slot. The routine force_empty_slot finds an
+empty slot no matter what, as opposed to passive_empty_slot. If force_empty_slot
+needs to evict, it calls choice_to_evict that chooses a good candidate. Upon
+return from choice_to_evict, the running thread holds the return values slot lock.
+It then changes the sector number in the buffer for that slot so that the previous
+holder won't show up in subsequent lookups for it, and  releases the buffer
+lock. It then writes back the contents to the disk if need be, and returns
+the slot number to the caller of force_empty_slot so that it can carry on
+with it's IO.
+
+---- RATIONALE ----
+
+>> C7: Describe a file workload likely to benefit from buffer caching,
+>> and workloads likely to benefit from read-ahead and write-behind.
+The total amount of cache available is 32k, which isn't very much. Then
+it would work well when writes and reads are over a small area and a small
+number of files, like text-editing.
+
+Read-ahead is most likely to benefit applications like media players, where
+the read of the next sector is needed but the cache miss isn't triggered immediately
+after the last read. Doing it in the background means that the next slice of 
+data needed by the media application doesn't need to do extra work to prefetch it.
+
+Write-behind is useful for applications taht make a significant number of writes
+that are over many syscalls. This way, the writes will be done in memory more often
+than not, and it mitigates wasting the disk controller's time by needlessly making
+several writes that could be waited to be consolidated into a fewer.
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the feedback survey on the course
+website.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+>> Any other comments?
+

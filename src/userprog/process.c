@@ -9,6 +9,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/filedes.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -20,9 +21,6 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include <vector.h>
-#include "vm/frame.h"
-#include "vm/page.h"
-#include "vm/fmap.h"
 #define PAGE_SIZE 4096
 
 static thread_func start_process NO_RETURN;
@@ -149,8 +147,7 @@ static void start_process(void *file_name_) {
     if_.esp = stack;
 
     // Set up the file descriptor table.
-    vector_init(&curr->files);
-    vector_zeros(&curr->files, STDOUT_FILENO + 1);
+    fd_init();
 
     // Deny writes to the currently executing file. We do this
     // by opening the executing file, calling file_deny_write, and
@@ -158,7 +155,8 @@ static void start_process(void *file_name_) {
     // instance of the file open. It will be closed when the process
     // exits. We pass sys_open argv[0], which exists in user memory.
     int fd = sys_open(mems[0]);
-    file_deny_write(curr->files.data[fd]);
+    struct file *f = fd_lookup_file(fd);
+    file_deny_write(f);
 
     // We don't need mems any more.
     free(mems);
@@ -233,13 +231,7 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
-    unsigned int i;
-    for (i = STDOUT_FILENO + 1; i < curr->files.size; i++)
-    {
-        if (curr->files.data[i] != NULL)
-            sys_close(i);
-    }
-    vector_destruct(&curr->files);
+    fd_destruct();
 }
 
 /*! Sets up the CPU for running user code in the current thread.
@@ -337,9 +329,7 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
 
     /* Allocate and activate page directory. */
     t->pagedir = pagedir_create();
-    t->spt = spt_create_table();
-    t->fmap = fmap_create_table();
-    if (t->pagedir == NULL || t->spt == NULL || t->fmap == NULL)
+    if (t->pagedir == NULL)
         goto done;
     process_activate();
 
@@ -426,13 +416,16 @@ bool load(const char *file_name, void (**eip) (void), void **esp) {
     *eip = (void (*)(void)) ehdr.e_entry;
 
     success = true;
+
 done:
     /* We arrive here whether the load is successful or not. */
-    //file_close(file);
+    file_close(file);
     return success;
 }
 
 /* load() helpers. */
+
+static bool install_page(void *upage, void *kpage, bool writable);
 
 /*! Checks whether PHDR describes a valid, loadable segment in
     FILE and returns true if so, false otherwise. */
@@ -504,19 +497,28 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        struct thread *curr = thread_current();
-        struct spt_entry *spte = spt_create_entry(spt_get_key(upage));
-        spt_update_status(spte, SPT_FILESYS, SPT_FILESYS, writable);
-        spt_update_filesys(spte, file, ofs, page_read_bytes,
-            page_zero_bytes);
-        spte->is_mmap = false;
-        spt_insert(curr->spt, spte);
+        /* Get a page of memory. */
+        uint8_t *kpage = palloc_get_page(PAL_USER);
+        if (kpage == NULL)
+            return false;
+
+        /* Load this page. */
+        if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
+            palloc_free_page(kpage);
+            return false;
+        }
+        memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
+        /* Add the page to the process's address space. */
+        if (!install_page(upage, kpage, writable)) {
+            palloc_free_page(kpage);
+            return false;
+        }
 
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
-        ofs += PGSIZE;
     }
     return true;
 }
@@ -524,22 +526,18 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 /*! Create a minimal stack by mapping a zeroed page at the top of
     user virtual memory. */
 static bool setup_stack(void **esp) {
-    void *kpage;
+    uint8_t *kpage;
+    bool success = false;
 
-    // Get a frame for the stack
-    kpage = frame_get((void *) PHYS_BASE - PGSIZE, true);
-    // Create a spt entry
-    struct spt_entry *spte = spt_create_entry(
-            spt_get_key((void *) PHYS_BASE - PGSIZE));
-    spt_update_status(spte, SPT_INVALID, SPT_SWAP, true);
-    spt_insert(thread_current()->spt, spte);
+    kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kpage != NULL) {
-        *esp = PHYS_BASE;
-    } else {
-        palloc_free_page(kpage);
-        return false;
+        success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+        if (success)
+            *esp = PHYS_BASE;
+        else
+            palloc_free_page(kpage);
     }
-    return true;
+    return success;
 }
 
 /*! Adds a mapping from user virtual address UPAGE to kernel
@@ -551,7 +549,7 @@ static bool setup_stack(void **esp) {
     with palloc_get_page().
     Returns true on success, false if UPAGE is already mapped or
     if memory allocation fails. */
-bool install_page(void *upage, void *kpage, bool writable) {
+static bool install_page(void *upage, void *kpage, bool writable) {
     struct thread *t = thread_current();
 
     /* Verify that there's not already a page at that virtual

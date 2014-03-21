@@ -12,8 +12,8 @@
 #include <stdint.h>
 #include "fixed-point.h"
 #include "synch.h"
-#include "vm/page.h"
-#include "vm/fmap.h"
+#include "filesys/inode.h"
+#include "filesys/filesys.h"
 
 /*! States in a thread's life cycle. */
 enum thread_status {
@@ -24,6 +24,10 @@ enum thread_status {
     THREAD_DYING        /*!< About to be destroyed. */
 };
 
+#define update_thread() \
+    do {thread_current()->line = __LINE__; \
+        strlcpy(thread_current()->file, __FILE__, 24);}\
+       while (false)
 /*! Thread identifier type.
     You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -127,17 +131,17 @@ struct thread {
     /**@{*/
 #endif
 
-#ifdef VM
-    //Supplemental page table
-    struct spt_table *spt;
-    struct fmap_table *fmap;
-    void *esp;  /* esp of a syscall process. */
-#endif
     // File descriptor table.
     struct vector files;
 
+    // Current directory inode
+    struct inode *dir;
+
     int nice;  /*!< Nice value for the 4.4BSD Scheduler */
     fixed_point_t recent_cpu; /*!< Recent cpu time used (4.4BSD) */
+
+    int line;
+    char file[24];
 
     /*! Owned by thread.c. */
     /**@{*/
@@ -158,7 +162,6 @@ struct exit_state {
 };
 
 extern struct vector thread_exit_status;
-extern struct lock filesys_lock;
 
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.

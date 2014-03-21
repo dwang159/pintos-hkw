@@ -1,5 +1,7 @@
 #include "list.h"
 #include "../debug.h"
+#include <stdio.h>
+#include "threads/thread.h"
 
 /* Our doubly linked lists have two header elements: the "head"
    just before the first element and the "tail" just after the
@@ -30,6 +32,17 @@
    without sacrificing this simplicity.  But using two separate
    elements allows us to do a little bit of checking on some
    operations, which can be valuable.) */
+
+#define non_empty_check(list) \
+    do { if (list_empty (list)) { \
+            printf("list empty problem in list line %d " \
+               " and line %d in file %s\n", __LINE__, \
+               thread_current()->line,thread_current()->file);\
+            ASSERT(false);\
+         }}while (false)
+
+  
+ 
 
 static bool is_sorted (struct list_elem *a, struct list_elem *b,
                        list_less_func *less, void *aux) UNUSED;
@@ -279,7 +292,7 @@ list_pop_back (struct list *list)
 struct list_elem *
 list_front (struct list *list)
 {
-  ASSERT (!list_empty (list));
+  non_empty_check(list);
   return list->head.next;
 }
 
@@ -288,7 +301,8 @@ list_front (struct list *list)
 struct list_elem *
 list_back (struct list *list)
 {
-  ASSERT (!list_empty (list));
+  //ASSERT (!list_empty (list));
+  non_empty_check(list);
   return list->tail.prev;
 }
 

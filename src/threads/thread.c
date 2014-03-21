@@ -64,9 +64,6 @@ static unsigned thread_ticks;   /*!< # of timer ticks since last yield. */
 bool thread_exit_status_initialized;
 struct vector thread_exit_status;
 
-// Filesystem lock
-struct lock filesys_lock;
-
 /*! If false (default), use round-robin scheduler.
     If true, use multi-level feedback queue scheduler.
     Controlled by kernel command-line option "-o mlfqs". */
@@ -116,7 +113,6 @@ void thread_init(void) {
     list_init(&sleep_list);
 
     thread_exit_status_initialized = false;
-    lock_init(&filesys_lock);
 
     /* Initialize each list in ready_lists. */
     for (i = PRI_MIN; i <= PRI_MAX; i++) {
@@ -130,6 +126,7 @@ void thread_init(void) {
     initial_thread->tid = allocate_tid();
     initial_thread->nice = 0;
     initial_thread->recent_cpu = 0;
+    initial_thread->dir = NULL;
 }
 
 /*! Starts preemptive thread scheduling by enabling interrupts.
@@ -253,6 +250,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     }
 
     tid = t->tid = allocate_tid();
+    t->dir = thread_current()->dir;
 
     // We can't initialize this in thread_init, so we do it here.
     if (!thread_exit_status_initialized) {

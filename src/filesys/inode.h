@@ -2,13 +2,19 @@
 #define FILESYS_INODE_H
 
 #include <stdbool.h>
+#include <list.h>
 #include "filesys/off_t.h"
 #include "devices/block.h"
 
 struct bitmap;
+/*! Identifies an inode. */
+#define INODE_MAGIC 0x494e4f44
+
+/* Number of i_blocks. */
+#define N_BLOCKS 15
 
 void inode_init(void);
-bool inode_create(block_sector_t, off_t);
+bool inode_create(block_sector_t, off_t, bool, block_sector_t);
 struct inode *inode_open(block_sector_t);
 struct inode *inode_reopen(struct inode *);
 block_sector_t inode_get_inumber(const struct inode *);
@@ -20,4 +26,6 @@ void inode_deny_write(struct inode *);
 void inode_allow_write(struct inode *);
 off_t inode_length(const struct inode *);
 
+bool inode_is_removed(const struct inode *);
+bool inode_is_dir(const struct inode *);
 #endif /* filesys/inode.h */
